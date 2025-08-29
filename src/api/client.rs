@@ -116,7 +116,6 @@ impl ApiClient {
             .text("package_name", project_metadata.package_name.clone())
             .text("name", name.to_string())
             .text("contract_file", project_metadata.contract_file.clone())
-            .text("contract-name", project_metadata.contract_file.clone())
             .text(
                 "project_dir_path",
                 project_metadata.project_dir_path.clone(),
@@ -168,7 +167,6 @@ impl ApiClient {
         debug!("  package_name: {}", project_metadata.package_name);
         debug!("  name: {name}");
         debug!("  contract_file: {}", project_metadata.contract_file);
-        debug!("  contract-name: {}", project_metadata.contract_file);
         debug!("  project_dir_path: {}", project_metadata.project_dir_path);
         debug!("  build_tool: {}", project_metadata.build_tool);
         if let Some(ref dojo_version) = project_metadata.dojo_version {
