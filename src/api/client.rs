@@ -1,7 +1,7 @@
 use std::{fs, time::Duration};
 
 use backon::{BlockingRetryable, ExponentialBuilder};
-use log::{debug, info};
+use log::{debug, info, warn};
 use reqwest::{
     blocking::{self, multipart, Client},
     StatusCode,
@@ -94,6 +94,45 @@ impl ApiClient {
         Ok(url)
     }
 
+    /// Filter out dev-dependencies from Scarb.toml content to prevent
+    /// compilation issues on remote servers that don't have cargo installed
+    fn filter_scarb_toml_content(content: &str) -> String {
+        let mut lines = Vec::new();
+        let mut in_dev_deps = false;
+
+        for line in content.lines() {
+            // Check if we're entering a dev-dependencies section
+            if line.trim_start().starts_with("[dev-dependencies]") {
+                in_dev_deps = true;
+                // Add a comment instead of the section
+                lines.push("# [dev-dependencies] section removed for remote compilation");
+                continue;
+            }
+
+            // Check if we're entering a new section (but not dev-dependencies)
+            if line.trim_start().starts_with('[')
+                && !line.trim_start().starts_with("[dev-dependencies]")
+            {
+                // If we were in dev-deps and hit a new section, add empty line before it
+                if in_dev_deps {
+                    lines.push("");
+                }
+                in_dev_deps = false;
+                lines.push(line);
+                continue;
+            }
+
+            // Skip lines that are part of dev-dependencies
+            if in_dev_deps {
+                continue;
+            }
+
+            lines.push(line);
+        }
+
+        lines.join("\n")
+    }
+
     /// # Errors
     ///
     /// Will return `Err` on network request failure or if can't
@@ -151,7 +190,22 @@ impl ApiClient {
 
         // Send each file as a separate field with files[] prefix
         for file in files {
-            let file_content = fs::read_to_string(file.path.as_path())?;
+            let mut file_content = fs::read_to_string(file.path.as_path())?;
+
+            // Filter out dev-dependencies from Scarb.toml files to prevent remote compilation issues
+            if file.name == "Scarb.toml" || file.name.ends_with("/Scarb.toml") {
+                let original_len = file_content.len();
+                file_content = Self::filter_scarb_toml_content(&file_content);
+                if original_len != file_content.len() {
+                    warn!(
+                        "Filtered dev-dependencies from {} (size: {} -> {} bytes)",
+                        file.name,
+                        original_len,
+                        file_content.len()
+                    );
+                }
+            }
+
             body = body.text(format!("files[{}]", file.name), file_content);
         }
 
@@ -278,7 +332,7 @@ impl ApiClient {
         })?;
 
         // Debug logging to see the actual response
-        log::debug!("Parsed API Response: job_id={}, status={:?}, status_description={:?}, message={:?}, error_category={:?}", 
+        log::debug!("Parsed API Response: job_id={}, status={:?}, status_description={:?}, message={:?}, error_category={:?}",
                    data.job_id, data.status, data.status_description, data.message, data.error_category);
 
         match data.status {
@@ -387,4 +441,107 @@ pub fn poll_verification_status(
             Status::InProgress => ApiClientError::InProgress,
             Status::Finished(e) => e,
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_scarb_toml_removes_dev_dependencies() {
+        let input = r#"[package]
+name = "test"
+version = "0.1.0"
+
+[dependencies]
+starknet = "2.10.1"
+
+[dev-dependencies]
+assert_macros = "2.10.1"
+snforge_std = "0.38.3"
+
+[scripts]
+test = "snforge test"
+"#;
+
+        let expected = r#"[package]
+name = "test"
+version = "0.1.0"
+
+[dependencies]
+starknet = "2.10.1"
+
+# [dev-dependencies] section removed for remote compilation
+
+[scripts]
+test = "snforge test""#;
+
+        let result = ApiClient::filter_scarb_toml_content(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_filter_scarb_toml_preserves_other_sections() {
+        let input = r#"[package]
+name = "test"
+
+[dependencies]
+cairo = "2.0.0"
+
+[tool.fmt]
+max-line-length = 120
+"#;
+
+        let expected = r#"[package]
+name = "test"
+
+[dependencies]
+cairo = "2.0.0"
+
+[tool.fmt]
+max-line-length = 120"#;
+
+        let result = ApiClient::filter_scarb_toml_content(input);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_filter_scarb_toml_handles_no_dev_dependencies() {
+        let input = r#"[package]
+name = "test"
+version = "1.0.0"
+
+[dependencies]
+starknet = "2.10.1"
+"#;
+
+        // Should remain unchanged except for trailing newline
+        let result = ApiClient::filter_scarb_toml_content(input);
+        assert_eq!(result, input.lines().collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn test_filter_scarb_toml_handles_dev_deps_at_end() {
+        let input = r#"[package]
+name = "test"
+
+[dependencies]
+starknet = "2.10.1"
+
+[dev-dependencies]
+test_lib = "1.0.0"
+another_lib = "2.0.0"
+"#;
+
+        let expected = r#"[package]
+name = "test"
+
+[dependencies]
+starknet = "2.10.1"
+
+# [dev-dependencies] section removed for remote compilation"#;
+
+        let result = ApiClient::filter_scarb_toml_content(input);
+        assert_eq!(result, expected);
+    }
 }
