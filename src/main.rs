@@ -131,8 +131,8 @@ fn display_verbose_error(error: &CliError) {
     if let CliError::Api(ApiClientError::Verify(verification_error)) = error {
         // Extract the raw message from the error
         let raw_message = match verification_error {
-            VerificationError::CompilationFailure(msg) => msg,
-            VerificationError::VerificationFailure(msg) => msg,
+            VerificationError::CompilationFailure(msg)
+            | VerificationError::VerificationFailure(msg) => msg,
         };
 
         eprintln!("\n{}", "--- Detailed Error Output ---".bright_yellow());
