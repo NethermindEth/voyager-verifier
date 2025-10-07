@@ -254,4 +254,4 @@ If you're still experiencing issues:
 1. Run verification with `--verbose` flag and save the full error output
 2. Check that your project builds locally with `scarb --release build`
 3. Review the error message for specific file paths or error codes
-4. For persistent issues, reach out to @ametel01 on Telegram
+4. For persistent issues, reach out to @StarknetVoyager on Telegram
