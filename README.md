@@ -161,3 +161,97 @@ If the verification submission is successful, client will output the verificatio
 #### Checking job status
 
 User can query the verification job status using `status` command and providing job id as the `--job` argument value. The status check will poll the server with exponential backoff until the verification is complete or fails.
+
+## Troubleshooting
+
+When verification fails, you may see a generic error message like:
+
+```
+Error: [E004] Compilation failed: Compilation failed: `scarb` command exited with error
+```
+
+To get more detailed information about what went wrong, use the `--verbose` (or `-v`) flag:
+
+```bash
+voyager status --network mainnet --job <JOB_ID> --verbose
+```
+
+### Common Errors and Solutions
+
+#### Error: Module file not found (error[E0005])
+
+**Example:**
+```
+error[E0005]: Module file not found. Expected path: /tmp/targets/.../src/tests.cairo
+```
+
+**Cause:** A module is declared in your `lib.cairo` but the file doesn't exist or wasn't included in the verification submission.
+
+**Solutions:**
+- If the missing file is a test file (like `tests.cairo`, `test.cairo`, or files with `test` in the name), use the `--test-files` flag to include them:
+  ```bash
+  voyager verify --network mainnet \
+    --class-hash <HASH> \
+    --contract-name <NAME> \
+    --test-files
+  ```
+- Alternatively, remove the module declaration from `lib.cairo` if tests aren't needed for verification:
+  ```cairo
+  // Remove or comment out:
+  // pub mod tests;
+  ```
+- Verify the module file exists in your local project at the expected path
+
+#### Error: Syntax errors or import failures
+
+**Cause:** Your code has syntax errors or missing imports that prevent compilation.
+
+**Solutions:**
+- Run `scarb build` locally first to verify your project compiles correctly
+- Check that all dependencies are properly declared in `[dependencies]` section of `Scarb.toml`
+- Verify all import paths are correct and modules are properly defined in `lib.cairo`
+- Ensure you're compiling with `[profile.release]` settings (the remote compiler uses `scarb --release build`)
+
+### Debugging Tips
+
+1. **Use `--dry-run` to preview submission:**
+   ```bash
+   voyager verify --network mainnet \
+     --class-hash <HASH> \
+     --contract-name <NAME> \
+     --dry-run
+   ```
+   This shows which files will be sent without actually submitting.
+
+2. **Check your local build:**
+   ```bash
+   scarb --release build
+   ```
+   The remote compiler uses the same command, so if it fails locally it will fail remotely.
+
+3. **Use `--verbose` to see full error output:**
+   ```bash
+   voyager status --network mainnet --job <JOB_ID> --verbose
+   ```
+   This displays the complete compiler output from the remote server.
+
+4. **Review `[profile.release]` configuration:**
+   Remember that the remote compiler uses `scarb --release build`, so any special compiler settings must be under `[profile.release]`:
+   ```toml
+   [profile.release.cairo]
+   sierra-replace-ids = true
+   ```
+
+5. **Check file inclusion:**
+   - Test files in `src/` are excluded by default (use `--test-files` to include)
+   - `Scarb.lock` is excluded by default (use `--lock-file` to include)
+   - All `.cairo` files in `src/` are included
+   - Files listed as dependencies in `Scarb.toml` are resolved and included
+
+### Getting Help
+
+If you're still experiencing issues:
+1. Run verification with `--verbose` flag and save the full error output
+2. Check that your project builds locally with `scarb --release build`
+3. Review the error message for specific file paths or error codes
+4. For persistent issues, reach out to @ametel01 on Telegram

@@ -442,6 +442,10 @@ pub struct VerifyArgs {
         help = "Specify the project type (scarb, dojo, or auto-detect)"
     )]
     pub project_type: ProjectType,
+
+    /// Show detailed error messages from the remote compiler
+    #[arg(long, short = 'v', default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(clap::Args)]
@@ -456,6 +460,10 @@ pub struct StatusArgs {
     /// Verification job ID (UUID format)
     #[arg(long, value_name = "UUID")]
     pub job: String,
+
+    /// Show detailed error messages from the remote compiler
+    #[arg(long, short = 'v', default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(clap::ValueEnum, Clone)]
