@@ -728,23 +728,42 @@ fn extract_dojo_version(project_dir_path: &str) -> Option<String> {
         }
     };
 
-    // Navigate to dependencies.dojo.tag
-    debug!("🔎 Searching for dependencies.dojo.tag in Scarb.toml");
+    // Navigate to dependencies.dojo and extract version
+    debug!("🔎 Searching for dependencies.dojo in Scarb.toml");
     if let Some(dependencies) = parsed.get("dependencies") {
         debug!("✅ Found [dependencies] section");
         if let Some(dojo_dep) = dependencies.get("dojo") {
             debug!("✅ Found dojo dependency: {dojo_dep:?}");
+
+            // Case 1: dojo = "1.7.1" (simple string format)
+            if let Some(version_str) = dojo_dep.as_str() {
+                info!("🎯 Successfully extracted Dojo version from string: {version_str}");
+                return Some(version_str.to_string());
+            }
+
+            // Case 2: dojo = { tag = "v0.7.0" } (git dependency with tag)
             if let Some(tag) = dojo_dep.get("tag") {
-                debug!("✅ Found tag field: {tag:?}");
                 if let Some(tag_str) = tag.as_str() {
                     info!("🎯 Successfully extracted Dojo version from tag: {tag_str}");
                     return Some(tag_str.to_string());
                 } else {
                     warn!("⚠️  Tag field exists but is not a string: {tag:?}");
                 }
-            } else {
-                warn!("⚠️  Dojo dependency found but no 'tag' field");
             }
+
+            // Case 3: dojo = { version = "1.7.1" } (table with version field)
+            if let Some(version) = dojo_dep.get("version") {
+                if let Some(version_str) = version.as_str() {
+                    info!(
+                        "🎯 Successfully extracted Dojo version from version field: {version_str}"
+                    );
+                    return Some(version_str.to_string());
+                } else {
+                    warn!("⚠️  Version field exists but is not a string: {version:?}");
+                }
+            }
+
+            warn!("⚠️  Dojo dependency found but no recognized version format (expected string, 'tag', or 'version' field)");
         } else {
             warn!("⚠️  Dependencies section found but no 'dojo' dependency");
         }
@@ -942,4 +961,155 @@ fn validate_dojo_project(project: &args::Project) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_extract_dojo_version_simple_string() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Create Scarb.toml with simple string format: dojo = "1.7.1"
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+dojo = "1.7.1"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, Some("1.7.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_dojo_version_git_tag() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Create Scarb.toml with git tag format: dojo = { tag = "v0.7.0" }
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+dojo = { tag = "v0.7.0", git = "https://github.com/dojoengine/dojo" }
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, Some("v0.7.0".to_string()));
+    }
+
+    #[test]
+    fn test_extract_dojo_version_table_with_version_field() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Create Scarb.toml with table format: dojo = { version = "2.0.0" }
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+dojo = { version = "2.0.0" }
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, Some("2.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_extract_dojo_version_no_dojo_dependency() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Create Scarb.toml without dojo dependency
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+starknet = "2.0.0"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_dojo_version_missing_scarb_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Don't create Scarb.toml file
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_dojo_version_invalid_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // Create invalid TOML file
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(&scarb_toml_path, "this is not valid toml [[[").unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_dojo_version_priority_string_over_tag() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        // This shouldn't happen in practice, but test that simple string has priority
+        // Since in TOML you can't have both at same level, test with string only
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+
+[dependencies]
+dojo = "3.0.0"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path);
+        assert_eq!(result, Some("3.0.0".to_string()));
+    }
 }
