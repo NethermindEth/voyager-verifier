@@ -702,6 +702,102 @@ fn should_exclude_rust_file(file_path: &Utf8Path) -> bool {
     false
 }
 
+use crate::args::VerifyArgs;
+use crate::errors::{self, CliError};
+use crate::voyager;
+
+/// Gather and validate packages for verification
+///
+/// This function gathers all packages from the metadata and validates the package selection
+/// based on the --package argument. It ensures that workspace projects specify a package
+/// and that the requested package exists.
+///
+/// # Arguments
+///
+/// * `metadata` - Scarb metadata containing package information
+/// * `args` - Verification arguments with optional package filter
+///
+/// # Returns
+///
+/// Returns a vector of all packages (before filtering) if validation passes
+///
+/// # Errors
+///
+/// Returns a `CliError` if:
+/// - The specified package doesn't exist
+/// - Workspace project detected without --package argument
+pub fn gather_packages_and_validate(
+    metadata: &Metadata,
+    args: &VerifyArgs,
+) -> Result<Vec<PackageMetadata>, CliError> {
+    let mut packages: Vec<PackageMetadata> = vec![];
+    gather_packages(metadata, &mut packages)?;
+
+    // Filter packages based on --package argument
+    let filtered_packages: Vec<&PackageMetadata> = if let Some(package_id) = &args.package {
+        packages.iter().filter(|p| p.name == *package_id).collect()
+    } else {
+        packages.iter().collect()
+    };
+
+    // Validate package selection
+    if filtered_packages.is_empty() {
+        if let Some(package_name) = &args.package {
+            let available_packages: Vec<String> = packages.iter().map(|p| p.name.clone()).collect();
+            return Err(CliError::from(errors::MissingContract::new(
+                package_name.clone(),
+                available_packages,
+            )));
+        }
+    }
+
+    // Check workspace requirements
+    let workspace_manifest = &metadata.workspace.manifest_path;
+    let manifest_path = voyager::manifest_path(metadata);
+    let is_workspace = workspace_manifest != manifest_path && metadata.workspace.members.len() > 1;
+
+    if args.package.is_none() && is_workspace {
+        let available_packages: Vec<String> = packages.iter().map(|p| p.name.clone()).collect();
+        return Err(CliError::from(errors::MissingContract::new(
+            "Workspace project detected - use --package argument".to_string(),
+            available_packages,
+        )));
+    }
+
+    Ok(packages)
+}
+
+/// Collect source files from packages
+///
+/// Collects all source files from the given packages, optionally including test files.
+/// For Dojo projects, test files are typically included by default.
+///
+/// # Arguments
+///
+/// * `_metadata` - Scarb metadata (unused, kept for API consistency)
+/// * `packages` - List of packages to collect sources from
+/// * `include_test_files` - Whether to include test files
+///
+/// # Returns
+///
+/// Returns a vector of paths to all source files
+///
+/// # Errors
+///
+/// Returns a `CliError` if source file collection fails
+pub fn collect_source_files(
+    _metadata: &Metadata,
+    packages: &[PackageMetadata],
+    include_test_files: bool,
+) -> Result<Vec<Utf8PathBuf>, CliError> {
+    let mut sources: Vec<Utf8PathBuf> = vec![];
+    for package in packages {
+        let mut package_sources = package_sources_with_test_files(package, include_test_files)?;
+        sources.append(&mut package_sources);
+    }
+    Ok(sources)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
