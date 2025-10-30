@@ -59,3 +59,9 @@ pub mod voyager;
 
 /// Project type definitions and detection logic
 pub mod project;
+
+/// Verification workflow orchestration
+pub mod verification;
+
+/// File collection, validation, and preparation for verification
+pub mod file_collector;
