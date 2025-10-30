@@ -28,7 +28,7 @@ use std::collections::HashMap;
 /// 2. Filtering to the target package
 /// 3. Finding the contract file
 /// 4. Preparing the project directory path
-/// 5. Converting to FileInfo structures
+/// 5. Converting to `FileInfo` structures
 ///
 /// # Arguments
 ///
@@ -39,7 +39,7 @@ use std::collections::HashMap;
 ///
 /// # Returns
 ///
-/// Returns a tuple of (file_infos, package_meta, contract_file, project_dir_path)
+/// Returns a tuple of (`file_infos`, `package_meta`, `contract_file`, `project_dir_path`)
 ///
 /// # Errors
 ///
@@ -108,7 +108,7 @@ pub fn prepare_project_for_verification(
 ///
 /// # Returns
 ///
-/// Returns a HashMap mapping relative paths to absolute paths
+/// Returns a `HashMap` mapping relative paths to absolute paths
 ///
 /// # Errors
 ///
@@ -439,9 +439,9 @@ pub fn prepare_project_dir_path(args: &VerifyArgs, prefix: &Utf8Path) -> Result<
     Ok(project_dir_path.to_string())
 }
 
-/// Convert to FileInfo
+/// Convert to `FileInfo`
 ///
-/// Converts a HashMap of file paths to a vector of FileInfo structures
+/// Converts a `HashMap` of file paths to a vector of `FileInfo` structures
 /// suitable for the API client.
 ///
 /// # Arguments
@@ -450,7 +450,7 @@ pub fn prepare_project_dir_path(args: &VerifyArgs, prefix: &Utf8Path) -> Result<
 ///
 /// # Returns
 ///
-/// Returns a vector of FileInfo structures
+/// Returns a vector of `FileInfo` structures
 pub fn convert_to_file_info(files: HashMap<String, Utf8PathBuf>) -> Vec<FileInfo> {
     files
         .into_iter()
