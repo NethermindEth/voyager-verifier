@@ -7,7 +7,7 @@ use spdx::LicenseId;
 use std::{env, fmt::Display, io, path::PathBuf};
 use thiserror::Error;
 
-use verifier::{class_hash::ClassHash, project::ProjectType};
+use crate::{class_hash::ClassHash, project::ProjectType};
 
 fn get_name_validation_regex() -> Result<&'static Regex, String> {
     lazy_static! {

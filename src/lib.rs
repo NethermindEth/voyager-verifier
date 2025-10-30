@@ -39,6 +39,9 @@
 /// API client and types for interacting with verification services
 pub mod api;
 
+/// Command-line argument parsing and project configuration
+pub mod args;
+
 /// Type-safe class hash handling and validation
 pub mod class_hash;
 
