@@ -1,9 +1,9 @@
-use std::{fs, time::Duration};
+use std::{collections::HashMap, fs, time::Duration};
 
 use backon::{BlockingRetryable, ExponentialBuilder};
 use log::{debug, info, warn};
 use reqwest::{
-    blocking::{self, multipart, Client},
+    blocking::{self, Client},
     StatusCode,
 };
 use url::Url;
@@ -13,6 +13,7 @@ use crate::{class_hash::ClassHash, errors::RequestFailure};
 use super::errors::{ApiClientError, VerificationError};
 use super::models::{
     Error, FileInfo, ProjectMetadataInfo, VerificationJob, VerificationJobDispatch,
+    VerificationRequest,
 };
 use super::types::VerifyJobStatus;
 
@@ -145,40 +146,10 @@ impl ApiClient {
         project_metadata: ProjectMetadataInfo,
         files: &[FileInfo],
     ) -> Result<String, ApiClientError> {
-        let mut body = multipart::Form::new()
-            .percent_encode_noop()
-            .text(
-                "compiler_version",
-                project_metadata.cairo_version.to_string(),
-            )
-            .text("scarb_version", project_metadata.scarb_version.to_string())
-            .text("package_name", project_metadata.package_name.clone())
-            .text("name", name.to_string())
-            .text("contract_file", project_metadata.contract_file.clone())
-            .text("contract-name", project_metadata.contract_file.clone())
-            .text(
-                "project_dir_path",
-                project_metadata.project_dir_path.clone(),
-            )
-            .text("build_tool", project_metadata.build_tool.clone());
-
-        // Add Dojo version if available
-        if let Some(ref dojo_version) = project_metadata.dojo_version {
-            info!("📤 Adding dojo_version to API request: {dojo_version}");
-            body = body.text("dojo_version", dojo_version.clone());
-        } else {
-            debug!("📤 No dojo_version to include in API request");
-        }
-
-        info!(
-            "🌐 API request payload prepared - build_tool: '{}', dojo_version: {:?}",
-            project_metadata.build_tool, project_metadata.dojo_version
-        );
-
-        // Add license using raw SPDX identifier
+        // Prepare license value
         let license_value = if let Some(lic) = license {
             if lic == "MIT" {
-                "MIT".to_string() // Ensure MIT is formatted correctly
+                "MIT".to_string()
             } else {
                 lic
             }
@@ -186,13 +157,26 @@ impl ApiClient {
             "NONE".to_string()
         };
 
-        body = body.text("license", license_value.clone());
+        // Add Dojo version if available
+        let dojo_version = if let Some(ref dojo_version) = project_metadata.dojo_version {
+            info!("📤 Adding dojo_version to API request: {dojo_version}");
+            Some(dojo_version.clone())
+        } else {
+            debug!("📤 No dojo_version to include in API request");
+            None
+        };
 
-        // Send each file as a separate field with files[] prefix
+        info!(
+            "🌐 API request payload prepared - build_tool: '{}', dojo_version: {:?}",
+            project_metadata.build_tool, project_metadata.dojo_version
+        );
+
+        // Collect files into HashMap
+        let mut files_map = HashMap::new();
         for file in files {
             let mut file_content = fs::read_to_string(file.path.as_path())?;
 
-            // Filter out dev-dependencies from Scarb.toml files to prevent remote compilation issues
+            // Filter out dev-dependencies from Scarb.toml files
             if file.name == "Scarb.toml" || file.name.ends_with("/Scarb.toml") {
                 let original_len = file_content.len();
                 file_content = Self::filter_scarb_toml_content(&file_content);
@@ -206,55 +190,46 @@ impl ApiClient {
                 }
             }
 
-            body = body.text(format!("files[{}]", file.name), file_content);
+            files_map.insert(file.name.clone(), file_content);
         }
+
+        // Build JSON request body
+        let request_body = VerificationRequest {
+            compiler_version: project_metadata.cairo_version.to_string(),
+            scarb_version: project_metadata.scarb_version.to_string(),
+            package_name: project_metadata.package_name.clone(),
+            name: name.to_string(),
+            contract_file: project_metadata.contract_file.clone(),
+            contract_name: project_metadata.contract_file.clone(),
+            project_dir_path: project_metadata.project_dir_path.clone(),
+            build_tool: project_metadata.build_tool,
+            license: license_value,
+            dojo_version,
+            files: files_map,
+        };
 
         let url = self.verify_class_url(class_hash)?;
 
-        // Debug log: Complete API payload summary
+        // Debug logging
         debug!("🚀 === API REQUEST PAYLOAD DEBUG ===");
         debug!("🎯 Target URL: {url}");
         debug!("🏗️  Request Method: POST");
-        debug!("📦 Content-Type: multipart/form-data");
-        debug!("📋 === FORM FIELDS ===");
-        debug!("  compiler_version: {}", project_metadata.cairo_version);
-        debug!("  scarb_version: {}", project_metadata.scarb_version);
-        debug!("  package_name: {}", project_metadata.package_name);
-        debug!("  name: {name}");
-        debug!("  contract_file: {}", project_metadata.contract_file);
-        debug!("  contract-name: {}", project_metadata.contract_file);
-        debug!("  project_dir_path: {}", project_metadata.project_dir_path);
-        debug!("  build_tool: {}", project_metadata.build_tool);
-        if let Some(ref dojo_version) = project_metadata.dojo_version {
-            debug!("  dojo_version: {dojo_version}");
-        } else {
-            debug!("  dojo_version: <not included>");
-        }
-        debug!("  license: {license_value}");
-        debug!("📁 === FILES INCLUDED ===");
-        for (index, file) in files.iter().enumerate() {
-            let file_size = match fs::metadata(&file.path) {
-                Ok(metadata) => metadata.len(),
-                Err(_) => 0,
-            };
-            debug!(
-                "  [{:2}] files[{}] -> {} ({} bytes)",
-                index + 1,
-                file.name,
-                file.path.display(),
-                file_size
-            );
+        debug!("📦 Content-Type: application/json");
+        if let Ok(json_str) = serde_json::to_string_pretty(&request_body) {
+            debug!("📋 Request Body: {}", json_str);
         }
         debug!("📊 Total files: {}", files.len());
         debug!("🚀 === END API REQUEST PAYLOAD ===");
 
+        // Send JSON request
         let response = self
             .client
             .post(url.clone())
-            .multipart(body)
+            .json(&request_body) // Changed from .multipart(body)
             .send()
             .map_err(ApiClientError::Reqwest)?;
 
+        // Error handling (unchanged)
         match response.status() {
             StatusCode::OK => (),
             StatusCode::BAD_REQUEST => {

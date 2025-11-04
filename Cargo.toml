@@ -4,7 +4,7 @@ description = "Contract class verification tool that allows you to verify your s
 license = "Apache-2.0"
 name = "voyager-verifier"
 repository = "https://github.com/NethermindEth/voyager-verifier"
-version = "1.2.4"
+version = "1.3.0"
 default-run = "voyager"
 edition = "2021"
 keywords = ["starknet", "verification", "smart-contracts", "ethereum"]
@@ -40,7 +40,7 @@ itertools = "0.14"
 log = "0.4"
 regex = "1"
 lazy_static = "1.5"
-reqwest = { version = "0.12", features = ["blocking", "json", "multipart", "native-tls-vendored"] }
+reqwest = { version = "0.12", features = ["blocking", "json", "native-tls-vendored"] }
 scarb-metadata = "1.15"
 semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }

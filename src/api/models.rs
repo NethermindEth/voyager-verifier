@@ -1,7 +1,8 @@
 use super::types::VerifyJobStatus;
 use crate::project::ProjectType;
 use semver;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
@@ -152,4 +153,21 @@ impl ProjectMetadataInfo {
             dojo_version,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct VerificationRequest {
+    pub compiler_version: String,
+    pub scarb_version: String,
+    pub package_name: String,
+    pub name: String,
+    pub contract_file: String,
+    #[serde(rename = "contract-name")]
+    pub contract_name: String,
+    pub project_dir_path: String,
+    pub build_tool: String,
+    pub license: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dojo_version: Option<String>,
+    pub files: HashMap<String, String>, // filename -> content
 }
