@@ -390,6 +390,9 @@ pub enum CliError {
 
     #[error("[E027] Interactive prompt failed\n\nSuggestions:\n  • Use --project-type=scarb or --project-type=dojo to skip prompt\n  • Ensure terminal supports interactive input\n  • Check that stdin is available")]
     InteractivePromptFailed(#[from] dialoguer::Error),
+
+    #[error("[E028] Internal error: {message}\n\nThis is an internal error that should not occur. Please report this issue with:\n  • The full command you ran\n  • The context in which this error occurred\n  • Any relevant logs or output")]
+    InternalError { message: String },
 }
 
 impl CliError {
@@ -411,6 +414,7 @@ impl CliError {
             Self::InvalidProjectType { .. } => "E025",
             Self::DojoValidationFailed => "E026",
             Self::InteractivePromptFailed(_) => "E027",
+            Self::InternalError { .. } => "E028",
         }
     }
 }

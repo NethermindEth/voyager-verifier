@@ -72,6 +72,20 @@ pub fn submit(
 ) -> Result<String, CliError> {
     info!("🚀 Starting verification for project at: {}", args.path);
 
+    // Validate required fields are present (they should be if not in wizard mode, or populated by wizard)
+    let class_hash = args
+        .class_hash
+        .as_ref()
+        .ok_or_else(|| CliError::InternalError {
+            message: "class_hash should be present - either from CLI args or wizard".to_string(),
+        })?;
+    let contract_name = args
+        .contract_name
+        .as_ref()
+        .ok_or_else(|| CliError::InternalError {
+            message: "contract_name should be present - either from CLI args or wizard".to_string(),
+        })?;
+
     // Determine project type early in the process
     let project_type = determine_project_type(args)?;
 
@@ -120,8 +134,8 @@ pub fn submit(
 
     println!("\n✅ Dry run completed successfully!");
     println!("Collected {} file(s) for verification", file_infos.len());
-    println!("Contract: {}", args.contract_name);
-    println!("Class hash: {}", args.class_hash);
+    println!("Contract: {}", contract_name);
+    println!("Class hash: {}", class_hash);
     println!("\n⚠️  No verification was submitted due to --dry-run flag");
     println!("Remove --dry-run to submit for actual verification.\n");
     Ok("dry-run".to_string())
@@ -155,6 +169,20 @@ pub fn execute_verification(
     context: VerificationContext,
     license_info: &license::LicenseInfo,
 ) -> Result<String, CliError> {
+    // Extract required fields
+    let class_hash = args
+        .class_hash
+        .as_ref()
+        .ok_or_else(|| CliError::InternalError {
+            message: "class_hash should be present".to_string(),
+        })?;
+    let contract_name = args
+        .contract_name
+        .as_ref()
+        .ok_or_else(|| CliError::InternalError {
+            message: "contract_name should be present".to_string(),
+        })?;
+
     let metadata = args.path.metadata();
     let cairo_version = metadata.app_version_info.cairo.version.clone();
     let scarb_version = metadata.app_version_info.version.clone();
@@ -221,9 +249,9 @@ pub fn execute_verification(
 
     api_client
         .verify_class(
-            &args.class_hash,
+            class_hash,
             Some(license_info.display_string().to_string()),
-            &args.contract_name,
+            contract_name,
             project_meta,
             &context.file_infos,
         )

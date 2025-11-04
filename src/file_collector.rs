@@ -66,8 +66,16 @@ pub fn prepare_project_for_verification(
         .first()
         .ok_or_else(|| CliError::NoTarget)?;
 
+    // Extract contract name (required field)
+    let contract_name = args
+        .contract_name
+        .as_ref()
+        .ok_or_else(|| CliError::InternalError {
+            message: "contract_name should be present".to_string(),
+        })?;
+
     // Find contract file
-    let contract_file_path = find_contract_file(package_meta, &sources, &args.contract_name)?;
+    let contract_file_path = find_contract_file(package_meta, &sources, contract_name)?;
     let contract_file =
         contract_file_path
             .strip_prefix(&prefix)
@@ -480,9 +488,13 @@ pub fn log_verification_info(
     let cairo_version = &metadata.app_version_info.cairo.version;
     let scarb_version = &metadata.app_version_info.version;
 
+    // This function is only called after validation, so contract_name should always be present
+    // If it's not, we'll use a placeholder to avoid panicking during logging
+    let contract_name = args.contract_name.as_deref().unwrap_or("<unknown>");
+
     info!(
         "Verifying contract: {} from {}",
-        args.contract_name, contract_file
+        contract_name, contract_file
     );
     info!("licensed with: {}", license_info.display_string());
     info!("using cairo: {cairo_version} and scarb {scarb_version}");
