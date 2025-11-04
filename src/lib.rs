@@ -65,3 +65,6 @@ pub mod verification;
 
 /// File collection, validation, and preparation for verification
 pub mod file_collector;
+
+/// Interactive verification wizard for guided contract verification
+pub mod wizard;

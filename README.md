@@ -65,6 +65,26 @@ Alternatively, you can provide the license via the `--license` CLI argument when
 
 ### Verify your contract
 
+#### Interactive Wizard Mode (Recommended for First-Time Users)
+
+For a guided, step-by-step verification experience, use the interactive wizard:
+
+```bash
+voyager verify --wizard
+```
+
+The wizard will prompt you for all required information:
+- Network selection (Mainnet/Sepolia/Dev/Custom)
+- Class hash
+- Package selection (for workspace projects)
+- Contract name
+- License (with auto-detection from Scarb.toml)
+- Optional features (lock file, test files, watch mode, verbose output)
+
+This is the easiest way to verify your contract if you're new to the tool or don't use it frequently.
+
+#### Command-Line Mode
+
 Once you have the verifier installed, execute:
 
 **Using predefined networks:**
@@ -136,8 +156,12 @@ Either `--network` or `--url` must be provided, but not both.
 
 #### Verification process
 
-In order to verify a contract, you need to provide several arguments:
+In order to verify a contract, you can either use the interactive wizard (`--wizard`) or provide arguments directly via the command line:
 
+- `--wizard`, run interactive verification wizard (recommended for first-time users)
+  - Prompts you step-by-step for all required information
+  - Auto-detects licenses from Scarb.toml
+  - Provides helpful explanations for each option
 - `--class-hash`, class hash of the declared contract
 - `--contract-name`, name of the contract to verify
 - `--path`, path to directory containing scarb project (If omitted it will use current working directory)

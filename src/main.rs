@@ -7,14 +7,23 @@ use verifier::{
     errors::CliError,
     license,
     verification::{check, display_verbose_error, display_verification_job_id, submit},
+    wizard,
 };
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
     let Args { command: cmd } = Args::parse();
 
-    match &cmd {
+    match cmd {
         Commands::Verify(args) => {
+            // Check if wizard mode is enabled
+            let args = if args.wizard {
+                // Run the wizard with the already-loaded project
+                wizard::run_wizard(args.path)?
+            } else {
+                args
+            };
+
             let api_client = ApiClient::new(args.network_url.url.clone())?;
 
             let license_info = license::resolve_license_info(
@@ -25,7 +34,7 @@ fn main() -> anyhow::Result<()> {
 
             license::warn_if_no_license(&license_info);
 
-            let job_id = submit(&api_client, args, &license_info).map_err(|e| {
+            let job_id = submit(&api_client, &args, &license_info).map_err(|e| {
                 if args.verbose {
                     display_verbose_error(&e);
                 }

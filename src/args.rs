@@ -268,7 +268,7 @@ pub enum Commands {
     Status(StatusArgs),
 }
 
-fn license_value_parser(license: &str) -> Result<LicenseId, String> {
+pub fn license_value_parser(license: &str) -> Result<LicenseId, String> {
     // First try for exact SPDX identifier match
     if let Some(id) = spdx::license_id(license) {
         return Ok(id);
@@ -302,7 +302,7 @@ fn license_value_parser(license: &str) -> Result<LicenseId, String> {
     Err(format!("Unrecognized license: {license}{guess}"))
 }
 
-fn contract_name_value_parser(name: &str) -> Result<String, String> {
+pub fn contract_name_value_parser(name: &str) -> Result<String, String> {
     // Check for minimum length
     if name.is_empty() {
         return Err("Contract name cannot be empty".to_string());
@@ -394,9 +394,10 @@ pub struct VerifyArgs {
     #[arg(
         long = "class-hash",
         value_name = "HASH",
-        value_parser = ClassHash::new
+        value_parser = ClassHash::new,
+        required_unless_present = "wizard"
     )]
-    pub class_hash: ClassHash,
+    pub class_hash: Option<ClassHash>,
 
     /// Wait indefinitely for verification result (polls until completion)
     #[arg(long, default_value_t = false)]
@@ -414,9 +415,10 @@ pub struct VerifyArgs {
     #[arg(
         long = "contract-name",
         value_name = "NAME",
-        value_parser = contract_name_value_parser
+        value_parser = contract_name_value_parser,
+        required_unless_present = "wizard"
     )]
-    pub contract_name: String,
+    pub contract_name: Option<String>,
 
     /// Select specific package for verification (required for workspace projects)
     #[arg(
@@ -446,6 +448,10 @@ pub struct VerifyArgs {
     /// Show detailed error messages from the remote compiler
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
+
+    /// Run interactive verification wizard
+    #[arg(long, default_value_t = false)]
+    pub wizard: bool,
 }
 
 #[derive(clap::Args)]
@@ -486,17 +492,29 @@ pub struct Network {
 
 impl clap::FromArgMatches for Network {
     fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
-        let url = matches
-            .get_one::<Url>("url")
-            .ok_or_else(|| {
-                clap::Error::raw(
-                    clap::error::ErrorKind::MissingRequiredArgument,
-                    "API URL is required when not using predefined networks",
-                )
-            })?
-            .clone();
+        // Check if wizard mode is enabled
+        let wizard_mode = matches.get_one::<bool>("wizard").copied().unwrap_or(false);
 
-        Ok(Self { url })
+        if wizard_mode {
+            // In wizard mode, provide a placeholder URL that will be replaced by the wizard
+            // SAFETY: Hardcoded URL is guaranteed to be valid
+            #[allow(clippy::unwrap_used)]
+            Ok(Self {
+                url: Url::parse("https://api.voyager.online/beta").unwrap(),
+            })
+        } else {
+            let url = matches
+                .get_one::<Url>("url")
+                .ok_or_else(|| {
+                    clap::Error::raw(
+                        clap::error::ErrorKind::MissingRequiredArgument,
+                        "API URL is required when not using predefined networks",
+                    )
+                })?
+                .clone();
+
+            Ok(Self { url })
+        }
     }
 
     fn from_arg_matches_mut(matches: &mut clap::ArgMatches) -> Result<Self, clap::Error> {
@@ -512,16 +530,22 @@ impl clap::FromArgMatches for Network {
         &mut self,
         matches: &mut clap::ArgMatches,
     ) -> Result<(), clap::Error> {
-        self.url = matches
-            .get_one::<Url>("url")
-            .ok_or_else(|| {
-                clap::Error::raw(
-                    clap::error::ErrorKind::MissingRequiredArgument,
-                    "API URL is required when not using predefined networks",
-                )
-            })?
-            .clone();
+        // Check if wizard mode is enabled
+        let wizard_mode = matches.get_one::<bool>("wizard").copied().unwrap_or(false);
 
+        if !wizard_mode {
+            // Only update URL if not in wizard mode
+            self.url = matches
+                .get_one::<Url>("url")
+                .ok_or_else(|| {
+                    clap::Error::raw(
+                        clap::error::ErrorKind::MissingRequiredArgument,
+                        "API URL is required when not using predefined networks",
+                    )
+                })?
+                .clone();
+        }
+        // In wizard mode, keep the placeholder URL (will be replaced by wizard)
         Ok(())
     }
 }
@@ -544,7 +568,7 @@ impl clap::Args for Network {
                     ),
                     ("network", "dev", "https://dev-api.voyager.online/beta"),
                 ])
-                .required_unless_present("network"),
+                .required_unless_present_any(["network", "wizard"]),
         )
     }
 
@@ -564,7 +588,7 @@ impl clap::Args for Network {
                     ),
                     ("network", "dev", "https://dev-api.voyager.online/beta"),
                 ])
-                .required_unless_present("network"),
+                .required_unless_present_any(["network", "wizard"]),
         )
     }
 }
