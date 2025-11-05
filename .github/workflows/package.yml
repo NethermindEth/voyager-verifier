@@ -33,11 +33,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        
-      - name: Get version
+
+      - name: Get version and check if prerelease
         id: get_version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -51,7 +51,16 @@ jobs:
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "Version: $VERSION"
           fi
-        
+
+          # Check if this is a prerelease version (contains -alpha, -beta, -rc)
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease version, will skip crates.io publish"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release, will publish to crates.io"
+          fi
+
       - name: Verify version in Cargo.toml
         run: |
           CARGO_VERSION=$(grep -m 1 'version =' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
@@ -61,9 +70,14 @@ jobs:
             echo "Error: Version in Cargo.toml ($CARGO_VERSION) does not match release version (${{ steps.get_version.outputs.version }})"
             exit 1
           fi
-      
+
       - name: Publish to crates.io
+        if: steps.get_version.outputs.is_prerelease == 'false'
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+
+      - name: Skip crates.io publish for prerelease
+        if: steps.get_version.outputs.is_prerelease == 'true'
+        run: echo "Skipping crates.io publish for prerelease version ${{ steps.get_version.outputs.version }}"
       
   create_release:
     name: Create GitHub Release
@@ -74,28 +88,62 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0  # Fetch all history for all tags and branches
-      
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
+
+      - name: Check if prerelease
+        id: check_prerelease
+        run: |
+          VERSION="${{ inputs.tag || github.ref_name }}"
+          # Remove 'v' prefix if present
+          VERSION="${VERSION#v}"
+
+          # Check if this is a prerelease version (contains -alpha, -beta, -rc)
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease version"
+
+            # Determine prerelease type
+            if [[ "$VERSION" =~ -alpha ]]; then
+              echo "prerelease_type=⚠️ Alpha Release" >> $GITHUB_OUTPUT
+            elif [[ "$VERSION" =~ -beta ]]; then
+              echo "prerelease_type=🔨 Beta Release" >> $GITHUB_OUTPUT
+            elif [[ "$VERSION" =~ -rc ]]; then
+              echo "prerelease_type=🎯 Release Candidate" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "prerelease_type=✅ Stable Release" >> $GITHUB_OUTPUT
+            echo "This is a stable release"
+          fi
+
       - name: Generate changelog
         id: changelog
         run: |
-          # Get the previous tag (exclude current tag and filter out rc/pre-release versions)
+          # Get the previous tag (exclude current tag and filter out rc/pre-release versions for stable releases)
           CURRENT_TAG="${{ inputs.tag || github.ref_name }}"
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "$CURRENT_TAG" | grep -v "rc" | grep -v "pre" | head -1)
+
+          if [ "${{ steps.check_prerelease.outputs.is_prerelease }}" = "true" ]; then
+            # For prereleases, get the most recent tag (including other prereleases)
+            PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "$CURRENT_TAG" | head -1)
+          else
+            # For stable releases, get the most recent stable tag
+            PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "$CURRENT_TAG" | grep -v "alpha" | grep -v "beta" | grep -v "rc" | head -1)
+          fi
+
           echo "Current tag: $CURRENT_TAG"
           echo "Previous tag: $PREVIOUS_TAG"
-          
+
           # Generate changelog from commits
           if [ -n "$PREVIOUS_TAG" ]; then
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..${{ inputs.tag || github.ref_name }})
           else
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${{ inputs.tag || github.ref_name }})
           fi
-          
+
           # Save changelog to output
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
@@ -105,16 +153,31 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.GH_TOKEN }}
-          name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ steps.check_prerelease.outputs.prerelease_type }} ${{ inputs.tag || github.ref_name }}
           body: |
-            Release ${{ inputs.tag || github.ref_name }}
-            
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '⚠️ **This is a pre-release version for testing purposes only.**' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '**Not recommended for production use.**' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '' || '## Release' }} ${{ inputs.tag || github.ref_name }}
+
             ## What's Changed
-            
+
             ${{ steps.changelog.outputs.changelog }}
+
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '## Installation' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '**For testing with asdf:**' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '```bash' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && format('asdf install voyager-verifier {0}', inputs.tag || github.ref_name) || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && format('asdf local voyager-verifier {0}', inputs.tag || github.ref_name) || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '```' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '**For testing with cargo:**' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '```bash' || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && format('cargo install --git https://github.com/NethermindEth/voyager-verifier --tag {0}', inputs.tag || github.ref_name) || '' }}
+            ${{ steps.check_prerelease.outputs.is_prerelease == 'true' && '```' || '' }}
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             artifacts/build-*/voyager-verifier-*
             artifacts/checksums/checksums.sha256
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease == 'true' }}
