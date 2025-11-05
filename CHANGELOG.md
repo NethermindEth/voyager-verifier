@@ -10,14 +10,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Summary
 Major release focused on workflow efficiency, user experience, and automation capabilities.
 This release includes comprehensive feature additions and represents a significant evolution
-of the voyager-verifier tool.
+of the voyager-verifier tool with persistent history tracking and desktop notifications.
 
 ### Highlights
 - 🧙 Interactive verification wizard for guided contract verification
 - ⚙️ Improved error handling with proper error types instead of panics
 - 📦 Configuration file support with `.voyager.toml` for reduced command-line verbosity
+- 📚 Verification history tracking with local database (`~/.voyager/history.db`)
+- 🔔 Desktop notifications for verification completion
 
 ### Added
+
+#### Verification History & Tracking
+- Local SQLite database (`~/.voyager/history.db`) for persistent verification tracking
+  - Automatic tracking of all verification submissions
+  - Stores job ID, class hash, contract name, network, status, timestamps
+  - Tracks Cairo, Scarb, and Dojo versions for each verification
+  - Automatic status updates when checking job status
+  - Cross-session persistence
+- New `history` command with comprehensive subcommands:
+  - `voyager history list` - View all verification jobs with filtering
+    - Filter by status (`--status success/fail/pending`)
+    - Filter by network (`--network mainnet/sepolia/dev`)
+    - Limit results (`--limit N`)
+    - Sorted by submission time (newest first)
+  - `voyager history status --job <id>` - View detailed job information from local database
+    - Fast local lookup without API calls
+    - `--refresh` flag to update from API and sync database
+  - `voyager history recheck` - Batch update all pending jobs
+    - Automatically checks `Submitted`, `Processing`, and `Compiled` jobs
+    - Updates database with latest status
+    - Progress display for each job
+  - `voyager history clean` - Manage old records
+    - `--older-than N` to delete records older than N days
+    - `--all` to delete all records (with confirmation)
+  - `voyager history stats` - Display verification statistics
+    - Total verifications count
+    - Success/failure/pending rates with percentages
+    - Color-coded output
+- New history module (`src/history.rs`) with:
+  - `VerificationRecord` struct for storing job metadata
+  - `HistoryDb` for database operations
+  - `HistoryStats` for aggregated statistics
+  - Error codes E040-E042 for history-related errors
+  - Comprehensive unit tests with proper error handling
+
+#### Desktop Notifications
+- Optional desktop notification support for verification completion
+  - `--notify` flag for `verify` command (requires `--watch`)
+  - Cross-platform support (Linux, macOS, Windows)
+  - Automatic status detection (success ✅ or failure ❌)
+  - Non-intrusive notifications only on completion
+  - Terminal states only (Success, Fail, CompileFailed)
+- New notifications module (`src/notifications.rs`)
+- Optional feature flag `notifications` (enabled by default)
+  - Can be disabled with `--no-default-features` for minimal builds
+- Uses `notify-rust` crate for cross-platform desktop notifications
 
 #### Configuration File Support
 - `.voyager.toml` configuration file support for project-level defaults
@@ -42,6 +90,7 @@ of the voyager-verifier tool.
 #### Error Handling
 - New `InternalError` variant (E028) for graceful handling of invariant violations
 - Comprehensive error messages that guide users to solutions
+- All error handling uses proper `Result` types instead of `unwrap()` or `expect()`
 
 ### Changed
 - `class_hash` and `contract_name` are now optional when using `--wizard` mode
@@ -50,13 +99,30 @@ of the voyager-verifier tool.
 - `--url` and `--network` arguments are now optional when values are provided in `.voyager.toml`
 - Config file values are loaded and merged before validation, enabling config-driven workflows
 - Updated help text for `--url` to mention `.voyager.toml` configuration option
+- `verify` command now automatically saves job information to history database
+- `status` command now automatically updates history database when checking job status
+- `VerifyJobStatus` enum now implements `Copy` trait for better ergonomics
+- Verification workflow functions refactored to use `HistoryParams` struct instead of 8 individual parameters
+- All tests now use proper `Result` return types with `?` operator instead of `unwrap()` or `expect()`
+- Updated README with comprehensive documentation for history and notification features
 
 ### Fixed
 - Removed all `clippy::expect_used` warnings by implementing proper error handling
+- Removed all `clippy::unwrap_used` warnings in production and test code
 - Improved error handling edge cases in verification workflow
 - Better handling of missing required fields with actionable error messages
 - All clippy warnings in config module (derive Eq, use Self, documentation backticks, unwrap usage)
 - Config tests now use proper error propagation instead of `.unwrap()` calls
+- Fixed clippy warning about too many function arguments using parameter struct pattern
+- Fixed clippy warning about needless borrow in status update calls
+- Fixed clippy warning about manual inspect pattern (using `inspect_err` instead of `map_err`)
+- Fixed documentation formatting with proper backticks for `CompileFailed`
+- Removed unused imports and variables
+
+### Dependencies
+- Added `rusqlite` v0.34.0 with bundled SQLite for history database
+- Added `dirs` v5.0 for cross-platform home directory detection
+- Added `notify-rust` v4.11 (optional) for desktop notifications
 
 ### Removed
 - Unused Dockerfile

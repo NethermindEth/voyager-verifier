@@ -1,7 +1,7 @@
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Display;
 
-#[derive(Clone, Debug, Deserialize_repr, Eq, PartialEq, Serialize_repr)]
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, PartialEq, Serialize_repr)]
 #[repr(u8)]
 pub enum VerifyJobStatus {
     Submitted = 0,

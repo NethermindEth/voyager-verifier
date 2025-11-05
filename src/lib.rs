@@ -71,3 +71,9 @@ pub mod wizard;
 
 /// Configuration file support for .voyager.toml files
 pub mod config;
+
+/// Verification history tracking and local database management
+pub mod history;
+
+/// Desktop notification support for verification completion
+pub mod notifications;

@@ -199,6 +199,12 @@ The verifier searches for `.voyager.toml` in:
   - Overridden by: `--verbose` or `-v`
   - Default: `false`
 
+- **`notify`** - Send desktop notifications when verification completes (boolean)
+  - Overridden by: `--notify`
+  - Default: `false`
+  - Requires: `watch = true`
+  - Note: Only works when watch mode is enabled
+
 - **`url`** - Custom API endpoint URL (string)
   - Overridden by: `--url`
   - Alternative to using `--network`
@@ -299,11 +305,159 @@ CLI arguments still override config values when needed:
 voyager verify --network sepolia --class-hash 0x044dc2b3... --contract-name MyContract
 ```
 
+## Verification History
+
+### Overview
+
+The verifier automatically tracks all verification jobs in a local database (`~/.voyager/history.db`), allowing you to:
+- View past verifications across sessions
+- Re-check pending jobs
+- Filter by status, network, or date
+- Generate verification statistics
+- Clean old records
+
+No additional setup is required - the history database is created automatically on first use.
+
+### Viewing Verification History
+
+List all recent verifications:
+
+```bash
+voyager history list
+```
+
+Filter by status:
+
+```bash
+voyager history list --status success
+voyager history list --status pending
+```
+
+Filter by network:
+
+```bash
+voyager history list --network mainnet
+voyager history list --network sepolia
+```
+
+Limit results:
+
+```bash
+voyager history list --limit 10
+```
+
+### Checking Job Status from History
+
+View detailed information about a specific job:
+
+```bash
+voyager history status --job <JOB_ID>
+```
+
+Refresh status from the API and update the database:
+
+```bash
+voyager history status --job <JOB_ID> --network mainnet --refresh
+```
+
+### Re-checking Pending Jobs
+
+Automatically re-check all pending verifications and update their status:
+
+```bash
+voyager history recheck --network mainnet
+```
+
+This is useful for checking on multiple in-progress verifications at once.
+
+### Cleaning Old Records
+
+Delete records older than a specified number of days:
+
+```bash
+voyager history clean --older-than 30
+```
+
+Delete all history (with confirmation):
+
+```bash
+voyager history clean --all
+```
+
+### Viewing Statistics
+
+Get an overview of your verification success rates:
+
+```bash
+voyager history stats
+```
+
+Example output:
+```
+Verification History Statistics
+================================
+
+Total verifications: 47
+Successful: 41 (87%)
+Failed: 4 (9%)
+Pending: 2 (4%)
+```
+
+## Desktop Notifications
+
+### Overview
+
+When using the `--watch` flag to wait for verification completion, you can optionally enable desktop notifications to be alerted when verification finishes. This is useful when running long verifications in the background.
+
+### Enabling Notifications
+
+Add the `--notify` flag along with `--watch`:
+
+```bash
+voyager verify --network mainnet \
+  --class-hash 0x044dc2b3... \
+  --contract-name MyContract \
+  --watch \
+  --notify
+```
+
+### Features
+
+- **Cross-platform support**: Works on Linux, macOS, and Windows
+- **Automatic status detection**: Shows success (✅) or failure (❌) in notification
+- **Non-intrusive**: Notifications only appear on completion
+- **Optional**: Works without notifications if the feature is disabled
+
+### Disabling Notifications
+
+Notifications are an optional feature. To build without notification support:
+
+```bash
+cargo build --release --no-default-features
+```
+
+### Example Workflow
+
+```bash
+# Start a verification with notifications
+voyager verify --network mainnet \
+  --class-hash 0x123... \
+  --contract-name MyContract \
+  --watch \
+  --notify
+
+# Continue working on other tasks
+# You'll receive a desktop notification when verification completes
+
+# Later, check your verification history
+voyager history list --limit 5
+```
+
 ## Detailed information
 
 ### Verification
 
-`voyager` provides two subcommands: `verify` and `status`. For both commands the user needs to specify either:
+`voyager` provides three main subcommands: `verify`, `status`, and `history`. For `verify` and `status` commands the user needs to specify either:
 
 1. **Predefined network** via the `--network` argument:
    - `mainnet` - main starknet network (default API endpoint: <https://api.voyager.online/beta>)
@@ -336,6 +490,9 @@ In order to verify a contract, you can either use the interactive wizard (`--wiz
   - This can be useful when your contract depends on test utilities or helper functions for verification
   - Only affects files within the src/ directory; test files in dedicated test directories are still excluded
 - `--watch`, wait indefinitely for verification result (optional)
+  - Polls the verification status until completion
+  - Can be combined with `--notify` to receive desktop notifications when verification completes
+- `--notify`, send desktop notifications when verification completes (requires `--watch`)
 - `--package`, specify which package to verify (required for workspace projects with multiple packages)
 
 There are more options, each of them is documented in the `--help` output.
@@ -345,6 +502,18 @@ If the verification submission is successful, client will output the verificatio
 #### Checking job status
 
 User can query the verification job status using `status` command and providing job id as the `--job` argument value. The status check will poll the server with exponential backoff until the verification is complete or fails.
+
+Alternatively, you can use the `history` command to check jobs that have been tracked locally:
+
+```bash
+# Check from history (faster, uses local database)
+voyager history status --job <JOB_ID>
+
+# Re-check and update from API
+voyager history status --job <JOB_ID> --network mainnet --refresh
+```
+
+All verification jobs are automatically tracked in the local history database (`~/.voyager/history.db`), allowing you to check their status even across different CLI sessions.
 
 ## Troubleshooting
 
