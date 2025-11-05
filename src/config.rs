@@ -112,6 +112,10 @@ pub struct VoyagerConfig {
     #[cfg(feature = "notifications")]
     #[serde(default)]
     pub notify: Option<bool>,
+
+    /// Output format for status information (text, json, table)
+    #[serde(default)]
+    pub format: Option<String>,
 }
 
 /// Workspace-specific configuration

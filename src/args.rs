@@ -502,6 +502,22 @@ pub struct StatusArgs {
     /// Show detailed error messages from the remote compiler
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
+
+    /// Output format for status information
+    #[arg(long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutputFormat {
+    /// Human-readable text with enhanced formatting
+    Text,
+
+    /// JSON format for programmatic parsing
+    Json,
+
+    /// Table format (primarily for batch operations)
+    Table,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -728,6 +744,19 @@ impl StatusArgs {
         if let Some(verbose) = config.voyager.verbose {
             if !self.verbose {
                 self.verbose = verbose;
+            }
+        }
+
+        // Merge format if provided in config and not explicitly set via CLI
+        // Check if format is still default "text" (means not explicitly set via CLI)
+        if self.format == OutputFormat::Text {
+            if let Some(ref format_str) = config.voyager.format {
+                match format_str.to_lowercase().as_str() {
+                    "json" => self.format = OutputFormat::Json,
+                    "table" => self.format = OutputFormat::Table,
+                    "text" => self.format = OutputFormat::Text,
+                    _ => {} // Keep default if invalid format in config
+                }
             }
         }
 
