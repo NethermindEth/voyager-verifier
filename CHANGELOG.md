@@ -18,8 +18,35 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - 📦 Configuration file support with `.voyager.toml` for reduced command-line verbosity
 - 📚 Verification history tracking with local database (`~/.voyager/history.db`)
 - 🔔 Desktop notifications for verification completion
+- 📊 Enhanced status output with live progress bars and multiple format options
 
 ### Added
+
+#### Enhanced Status Output
+- Live status updates with real-time progress during verification
+  - Single-line updating display using ANSI escape codes
+  - Dynamic progress bar based on elapsed/remaining time ratio
+  - Stage-aware status messages (Submitted → Compiling → Verifying)
+  - Elapsed time with automatic updates every 2 seconds
+- Multiple output format support via `--format` flag
+  - `text` (default): Enhanced human-readable output with progress bars
+  - `json`: Machine-readable JSON for programmatic parsing and CI/CD integration
+  - `table`: Formatted table output for batch operations
+- Format option configurable in `.voyager.toml` (CLI flag takes precedence)
+- New status_output module (`src/status_output.rs`) with comprehensive formatting utilities
+- History-based time estimation for accurate progress predictions
+  - Queries last 10 successful verifications from local database
+  - Calculates average verification time (requires minimum 3 samples)
+  - Two-tier approach: historical averages when available, hardcoded fallbacks otherwise
+  - Estimates improve automatically as you verify more contracts
+- Fixed 2-second polling interval for consistent status checks
+  - Changed from exponential backoff to fixed intervals
+  - Maximum 300 retries (10 minutes timeout)
+- Live callback mechanism for real-time status updates
+  - New `poll_verification_status_with_callback()` API method
+  - New `get_job_status_raw()` to fetch full job data for in-progress jobs
+  - Callback invoked every poll with current job details
+- Cleaner final status output without redundant stage breakdown
 
 #### Verification History & Tracking
 - Local SQLite database (`~/.voyager/history.db`) for persistent verification tracking
@@ -105,8 +132,26 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - Verification workflow functions refactored to use `HistoryParams` struct instead of 8 individual parameters
 - All tests now use proper `Result` return types with `?` operator instead of `unwrap()` or `expect()`
 - Updated README with comprehensive documentation for history and notification features
+- Status display completely redesigned with live updating single-line format
+  - Replaced multi-case status display with unified formatting system
+  - Simplified verification.rs `check()` function by removing ~100 lines of legacy display code
+  - `check()` now accepts `OutputFormat` parameter for flexible output formatting
+- `VerificationJob` now implements `Clone` trait for status caching during polling
+- Polling interval changed from exponential backoff to fixed 2-second intervals
+- Enhanced dry-run output to display complete API request payload
+  - Shows all metadata fields (compiler_version, scarb_version, build_tool, license, etc.)
+  - Displays file count and file list instead of full file contents for readability
+  - Pretty-printed JSON format for easy inspection
+  - Helps users verify exact payload before submission
 
 ### Fixed
+- Improved contract file detection with pattern-based search and case-insensitive matching
+  - Added `find_contract_by_pattern()` to search for `#[starknet::contract]` attribute followed by `mod <ContractName>`
+  - Now correctly identifies contract files regardless of file name vs contract name casing mismatch
+  - Example: "Core" contract in `src/core/core.cairo` now correctly detected instead of falling back to `lib.cairo`
+  - Supports various formatting styles (with/without `pub`, different spacing and line breaks)
+  - Fallback heuristics improved with case-insensitive file path matching
+  - Better handling of contracts in subdirectories (e.g., `src/core/core.cairo`)
 - Removed all `clippy::expect_used` warnings by implementing proper error handling
 - Removed all `clippy::unwrap_used` warnings in production and test code
 - Improved error handling edge cases in verification workflow
@@ -118,6 +163,11 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - Fixed clippy warning about manual inspect pattern (using `inspect_err` instead of `map_err`)
 - Fixed documentation formatting with proper backticks for `CompileFailed`
 - Removed unused imports and variables
+- Fixed clippy warning `doc_markdown` by adding backticks to `min_samples` in documentation
+- Fixed clippy warning `manual_flatten` by using `.flatten()` iterator in history query
+- Removed unused DateTime and Duration imports from verification.rs
+- Cleaned up unused Stage and StageStatus types from status output module
+- Fixed clippy warnings `needless_continue` and `needless_range_loop` in file_collector module
 
 ### Dependencies
 - Added `rusqlite` v0.34.0 with bundled SQLite for history database

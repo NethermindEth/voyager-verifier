@@ -76,7 +76,8 @@ fn main() -> anyhow::Result<()> {
 
                 // If --watch flag is enabled, poll for verification result
                 if args.watch {
-                    let status = check(&api_client, &job_id).map_err(|e| {
+                    let status = check(&api_client, &job_id, &verifier::args::OutputFormat::Text)
+                        .map_err(|e| {
                         if args.verbose {
                             display_verbose_error(&e);
                         }
@@ -125,7 +126,7 @@ fn main() -> anyhow::Result<()> {
             }
 
             let api_client = ApiClient::new(args.network_url.url.clone())?;
-            let status = check(&api_client, &args.job).map_err(|e| {
+            let status = check(&api_client, &args.job, &args.format).map_err(|e| {
                 if args.verbose {
                     display_verbose_error(&e);
                 }
@@ -252,11 +253,14 @@ fn handle_history_command(
                     };
 
                     let api_client = ApiClient::new(url)?;
-                    let status = check(&api_client, &job).inspect_err(|e| {
-                        if verbose {
-                            display_verbose_error(e);
-                        }
-                    })?;
+                    let status = verifier::api::poll_verification_status(&api_client, &job)
+                        .map_err(|e| {
+                            let cli_error = CliError::from(e);
+                            if verbose {
+                                display_verbose_error(&cli_error);
+                            }
+                            cli_error
+                        })?;
 
                     // Update the database record
                     rec.update_status(*status.status());
@@ -350,7 +354,7 @@ fn handle_history_command(
             let mut updated = 0;
             for mut rec in all_pending {
                 print!("Checking {}... ", rec.job_id);
-                match check(&api_client, &rec.job_id) {
+                match verifier::api::poll_verification_status(&api_client, &rec.job_id) {
                     Ok(status) => {
                         let old_status = rec.status.clone();
                         rec.update_status(*status.status());
@@ -371,7 +375,8 @@ fn handle_history_command(
                     Err(e) => {
                         println!("{}", "Error".red());
                         if verbose {
-                            display_verbose_error(&e);
+                            let cli_error: CliError = e.into();
+                            display_verbose_error(&cli_error);
                         }
                     }
                 }

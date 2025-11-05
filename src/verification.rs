@@ -9,8 +9,8 @@
 //! - Managing the verification lifecycle from submission to completion
 
 use crate::api::{
-    poll_verification_status, ApiClient, ApiClientError, FileInfo, ProjectMetadataInfo,
-    VerificationError, VerificationJob, VerifyJobStatus,
+    ApiClient, ApiClientError, FileInfo, ProjectMetadataInfo, VerificationError, VerificationJob,
+    VerifyJobStatus,
 };
 use crate::args::VerifyArgs;
 use crate::errors::CliError;
@@ -19,11 +19,9 @@ use crate::history::{HistoryDb, VerificationRecord};
 use crate::license;
 use crate::project::{determine_project_type, extract_dojo_version, ProjectType};
 use crate::resolver::{collect_source_files, gather_packages_and_validate};
-use chrono::{DateTime, Utc};
 use colored::*;
 use log::{debug, info, warn};
 use scarb_metadata::PackageMetadata;
-use std::time::{Duration, UNIX_EPOCH};
 
 /// Context information for a verification job
 ///
@@ -133,10 +131,80 @@ pub fn submit(
         return execute_verification(api_client, args, context, license_info);
     }
 
+    // Dry run: Build and display the full payload that would be sent
     println!("\n✅ Dry run completed successfully!");
     println!("Collected {} file(s) for verification", file_infos.len());
     println!("Contract: {}", contract_name);
     println!("Class hash: {}", class_hash);
+
+    // Build the complete payload
+    let cairo_version = metadata.app_version_info.cairo.version.clone();
+    let scarb_version = metadata.app_version_info.version.clone();
+
+    // Extract Dojo version if it's a Dojo project (same logic as execute_verification)
+    let dojo_version = if project_type == ProjectType::Dojo {
+        let workspace_root = args.path.root_dir().to_string();
+        let package_root = package_meta.root.to_string();
+        let package_root_opt = if package_root != workspace_root {
+            Some(package_root.as_str())
+        } else {
+            None
+        };
+        extract_dojo_version(&workspace_root, package_root_opt)
+    } else {
+        None
+    };
+
+    // Prepare license value (same logic as in API client)
+    let license_str = license_info.display_string().to_string();
+    let license_value = if license_str == "MIT" {
+        "MIT".to_string()
+    } else {
+        license_str
+    };
+
+    // Build the request payload structure (without file contents for brevity)
+    #[derive(serde::Serialize)]
+    struct DryRunPayload {
+        compiler_version: String,
+        scarb_version: String,
+        package_name: String,
+        name: String,
+        contract_file: String,
+        #[serde(rename = "contract-name")]
+        contract_name: String,
+        project_dir_path: String,
+        build_tool: String,
+        license: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dojo_version: Option<String>,
+        file_count: usize,
+        file_list: Vec<String>,
+    }
+
+    let payload = DryRunPayload {
+        compiler_version: cairo_version.to_string(),
+        scarb_version: scarb_version.to_string(),
+        package_name: package_meta.name,
+        name: contract_name.to_string(),
+        contract_file: contract_file.clone(),
+        contract_name: contract_file,
+        project_dir_path,
+        build_tool: project_type.to_string(),
+        license: license_value,
+        dojo_version,
+        file_count: file_infos.len(),
+        file_list: file_infos.iter().map(|f| f.name.clone()).collect(),
+    };
+
+    // Display the payload as pretty-printed JSON
+    println!("\n{}", "=== API Request Payload ===".bright_cyan().bold());
+    match serde_json::to_string_pretty(&payload) {
+        Ok(json) => println!("{}", json),
+        Err(e) => warn!("Failed to serialize payload to JSON: {}", e),
+    }
+    println!("{}\n", "=== End Payload ===".bright_cyan().bold());
+
     println!("\n⚠️  No verification was submitted due to --dry-run flag");
     println!("Remove --dry-run to submit for actual verification.\n");
     Ok("dry-run".to_string())
@@ -360,15 +428,14 @@ fn update_history_status(
 /// Check the status of a verification job
 ///
 /// This function polls the verification service for the status of a job and
-/// displays the results to the user. It handles all possible job states:
-/// - Success: Displays verification details and Voyager link
-/// - Fail/CompileFailed: Shows error messages
-/// - Processing/Submitted/Compiled: Shows progress information
+/// displays the results to the user in the specified format. It handles all
+/// possible job states and formats output as text, JSON, or table.
 ///
 /// # Arguments
 ///
 /// * `api_client` - The API client for communicating with the verification service
 /// * `job_id` - The unique identifier of the verification job
+/// * `format` - The output format (Text, Json, or Table)
 ///
 /// # Returns
 ///
@@ -377,140 +444,52 @@ fn update_history_status(
 /// # Errors
 ///
 /// Returns a `CliError` if polling the status fails or the API returns an error.
-pub fn check(api_client: &ApiClient, job_id: &str) -> Result<VerificationJob, CliError> {
-    let status = poll_verification_status(api_client, job_id).map_err(CliError::from)?;
+pub fn check(
+    api_client: &ApiClient,
+    job_id: &str,
+    format: &crate::args::OutputFormat,
+) -> Result<VerificationJob, CliError> {
+    // Use polling with callback to show status updates during watch
+    let format_copy = *format;
 
-    // Update history database with latest status
-    if let Err(e) = update_history_status(job_id, *status.status()) {
-        warn!("Failed to update verification history: {e}");
-        // Don't fail the status check if history update fails
-    }
+    // For text format, show live inline status updates
+    if format_copy == crate::args::OutputFormat::Text {
+        let callback = |status: &VerificationJob| {
+            let inline_status = crate::status_output::format_inline_status(status);
+            // Clear line and update with new status
+            print!("\r\x1B[2K{}", inline_status);
+            use std::io::Write;
+            std::io::stdout().flush().ok();
+        };
 
-    match status.status() {
-        VerifyJobStatus::Success => {
-            println!("\n✅ Verification successful!");
-            if let Some(name) = status.name() {
-                println!("Contract name: {name}");
-            }
-            if let Some(file) = status.contract_file() {
-                println!("Contract file: {file}");
-            }
-            if let Some(version) = status.version() {
-                println!("Cairo version: {version}");
-            }
-            if let Some(dojo_version) = status.dojo_version() {
-                println!("Dojo version: {dojo_version}");
-            }
-            if let Some(license) = status.license() {
-                println!("License: {license}");
-            }
-            if let Some(address) = status.address() {
-                println!("Contract address: {address}");
-            }
-            println!("Class hash: {}", status.class_hash());
-            if let Some(created) = status.created_timestamp() {
-                println!("Created: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Last updated: {}", format_timestamp(updated));
-            }
-            println!("\nThe contract is now verified and visible on Voyager at https://voyager.online/class/{} .", status.class_hash());
-        }
-        VerifyJobStatus::Fail => {
-            println!("\n❌ Verification failed!");
-            if let Some(desc) = status.status_description() {
-                println!("Reason: {desc}");
-            }
-            if let Some(created) = status.created_timestamp() {
-                println!("Started: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Failed: {}", format_timestamp(updated));
-            }
-        }
-        VerifyJobStatus::CompileFailed => {
-            println!("\n❌ Compilation failed!");
-            if let Some(desc) = status.status_description() {
-                println!("Reason: {desc}");
-            }
-            if let Some(created) = status.created_timestamp() {
-                println!("Started: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Failed: {}", format_timestamp(updated));
-            }
-        }
-        VerifyJobStatus::Processing => {
-            println!("\n⏳ Contract verification is being processed...");
-            println!("Job ID: {}", status.job_id());
-            println!("Status: Processing");
-            if let Some(created) = status.created_timestamp() {
-                println!("Started: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Last updated: {}", format_timestamp(updated));
-            }
-            println!("\nUse the same command to check progress later.");
-        }
-        VerifyJobStatus::Submitted => {
-            println!("\n⏳ Verification job submitted and waiting for processing...");
-            println!("Job ID: {}", status.job_id());
-            println!("Status: Submitted");
-            if let Some(created) = status.created_timestamp() {
-                println!("Submitted: {}", format_timestamp(created));
-            }
-            println!("\nUse the same command to check progress later.");
-        }
-        VerifyJobStatus::Compiled => {
-            println!("\n⏳ Contract compiled successfully, verification in progress...");
-            println!("Job ID: {}", status.job_id());
-            println!("Status: Compiled");
-            if let Some(created) = status.created_timestamp() {
-                println!("Started: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Last updated: {}", format_timestamp(updated));
-            }
-            println!("\nUse the same command to check progress later.");
-        }
-        _ => {
-            println!("\n⏳ Verification in progress...");
-            println!("Job ID: {}", status.job_id());
-            println!("Status: {}", status.status());
-            if let Some(created) = status.created_timestamp() {
-                println!("Started: {}", format_timestamp(created));
-            }
-            if let Some(updated) = status.updated_timestamp() {
-                println!("Last updated: {}", format_timestamp(updated));
-            }
-            println!("\nUse the same command to check progress later.");
-        }
-    }
+        let status =
+            crate::api::poll_verification_status_with_callback(api_client, job_id, Some(&callback))
+                .map_err(CliError::from)?;
 
-    Ok(status)
-}
+        // Update history database with latest status
+        if let Err(e) = update_history_status(job_id, *status.status()) {
+            warn!("Failed to update verification history: {e}");
+        }
 
-/// Format a Unix timestamp as an RFC3339 string
-///
-/// Converts a floating-point Unix timestamp into a human-readable RFC3339
-/// formatted date-time string. If the timestamp cannot be converted (e.g.,
-/// it's out of range), returns the timestamp as a string instead.
-///
-/// # Arguments
-///
-/// * `timestamp` - Unix timestamp as a floating-point number
-///
-/// # Returns
-///
-/// Returns an RFC3339 formatted string like "2024-01-15T10:30:00+00:00",
-/// or the timestamp as a string if conversion fails.
-fn format_timestamp(timestamp: f64) -> String {
-    let duration = Duration::from_secs_f64(timestamp);
-    if let Some(datetime) = UNIX_EPOCH.checked_add(duration) {
-        let datetime: DateTime<Utc> = datetime.into();
-        datetime.to_rfc3339()
+        // Print newline and show final detailed status
+        println!();
+        let output = crate::status_output::format_status(&status, format);
+        println!("{}", output);
+
+        Ok(status)
     } else {
-        timestamp.to_string()
+        // For JSON/table formats, just poll without live updates
+        let status = crate::api::poll_verification_status_with_callback(api_client, job_id, None)
+            .map_err(CliError::from)?;
+
+        if let Err(e) = update_history_status(job_id, *status.status()) {
+            warn!("Failed to update verification history: {e}");
+        }
+
+        let output = crate::status_output::format_status(&status, format);
+        println!("{}", output);
+
+        Ok(status)
     }
 }
 

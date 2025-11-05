@@ -361,6 +361,51 @@ impl HistoryDb {
             pending: pending as usize,
         })
     }
+
+    /// Calculate average verification time for successful jobs (in seconds)
+    ///
+    /// Returns the average time from submission to completion for the last N
+    /// successful verifications. Returns None if there are fewer than `min_samples`.
+    pub fn get_average_verification_time(
+        &self,
+        samples: usize,
+        min_samples: usize,
+    ) -> Result<Option<u64>, HistoryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT submitted_at, completed_at
+             FROM verification_history
+             WHERE status = 'Success' AND completed_at IS NOT NULL
+             ORDER BY submitted_at DESC
+             LIMIT ?1",
+        )?;
+
+        let mut durations = Vec::new();
+
+        let rows = stmt.query_map(params![samples], |row| {
+            let submitted_str: String = row.get(0)?;
+            let completed_str: String = row.get(1)?;
+
+            let submitted: DateTime<Utc> = submitted_str.parse().unwrap_or_else(|_| Utc::now());
+            let completed: DateTime<Utc> = completed_str.parse().unwrap_or_else(|_| Utc::now());
+
+            let duration = (completed - submitted).num_seconds();
+            Ok(duration.max(0) as u64)
+        })?;
+
+        for duration in rows.flatten() {
+            durations.push(duration);
+        }
+
+        // Need minimum samples for reliable average
+        if durations.len() < min_samples {
+            return Ok(None);
+        }
+
+        let sum: u64 = durations.iter().sum();
+        let avg = sum / durations.len() as u64;
+
+        Ok(Some(avg))
+    }
 }
 
 /// Statistics about verification history

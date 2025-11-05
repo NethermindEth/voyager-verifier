@@ -36,7 +36,7 @@
 
 // Re-export the API module components
 pub use self::{
-    client::ApiClient,
+    client::{poll_verification_status_with_callback, ApiClient},
     errors::{ApiClientError, VerificationError},
     models::{FileInfo, ProjectMetadataInfo, VerificationJob, VerificationJobDispatch},
     polling::poll_verification_status,

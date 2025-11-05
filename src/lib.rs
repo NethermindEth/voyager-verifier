@@ -77,3 +77,6 @@ pub mod history;
 
 /// Desktop notification support for verification completion
 pub mod notifications;
+
+/// Enhanced status output formatting with progress bars and JSON support
+pub mod status_output;

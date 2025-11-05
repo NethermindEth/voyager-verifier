@@ -359,6 +359,45 @@ impl ApiClient {
         }
     }
 
+    /// Get raw job status data regardless of completion state
+    ///
+    /// Unlike `get_job_status`, this method returns the full `VerificationJob`
+    /// data for jobs in any state (including in-progress jobs).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the response cannot be parsed.
+    pub fn get_job_status_raw(
+        &self,
+        job_id: impl Into<String> + Clone,
+    ) -> Result<VerificationJob, ApiClientError> {
+        let url = self.get_job_status_url(job_id.clone().into())?;
+        let response = self.client.get(url.clone()).send()?;
+
+        match response.status() {
+            StatusCode::OK => (),
+            StatusCode::NOT_FOUND => return Err(ApiClientError::JobNotFound(job_id.into())),
+            status_code => {
+                return Err(ApiClientError::from(RequestFailure::new(
+                    url,
+                    status_code,
+                    response.text()?,
+                )));
+            }
+        }
+
+        let response_text = response.text()?;
+        let data: VerificationJob = serde_json::from_str(&response_text).map_err(|e| {
+            ApiClientError::from(RequestFailure::new(
+                url.clone(),
+                StatusCode::OK,
+                format!("Failed to parse JSON response: {e}"),
+            ))
+        })?;
+
+        Ok(data)
+    }
+
     /// # Errors
     ///
     /// Will return `Err` on network error or if the verification has failed.
@@ -390,6 +429,24 @@ pub fn poll_verification_status(
     api: &ApiClient,
     job_id: &str,
 ) -> Result<VerificationJob, ApiClientError> {
+    poll_verification_status_with_callback(api, job_id, None)
+}
+
+/// Poll verification status with an optional callback for status updates
+///
+/// This function polls the verification service for job status with exponential backoff.
+/// If a callback is provided, it will be called with the current status on each poll iteration.
+///
+/// # Arguments
+///
+/// * `api` - The API client
+/// * `job_id` - The verification job ID
+/// * `callback` - Optional callback function that receives the current `VerificationJob` status
+pub fn poll_verification_status_with_callback(
+    api: &ApiClient,
+    job_id: &str,
+    callback: Option<&dyn Fn(&VerificationJob)>,
+) -> Result<VerificationJob, ApiClientError> {
     let fetch = || -> Result<VerificationJob, Status> {
         let result: Option<VerificationJob> = api
             .get_job_status(job_id.to_owned())
@@ -398,18 +455,42 @@ pub fn poll_verification_status(
         result.ok_or(Status::InProgress)
     };
 
-    // So verbose because it has problems with inference
+    let mut retry_count = 0;
+    let mut last_status: Option<VerificationJob> = None;
+
+    // Fixed 2s polling interval (using ExponentialBuilder with same min/max)
     fetch
         .retry(
             ExponentialBuilder::default()
-                .with_max_times(0)
                 .with_min_delay(Duration::from_secs(2))
-                .with_max_delay(Duration::from_secs(300)) // 5 mins
-                .with_max_times(20),
+                .with_max_delay(Duration::from_secs(2)) // Same as min = fixed 2s interval
+                .with_max_times(300), // Max 300 retries * 2s = 10 minutes
         )
         .when(is_is_progress)
         .notify(|_, dur: Duration| {
-            println!("Job: {job_id} didn't finish, retrying in {dur:?}");
+            retry_count += 1;
+
+            // Try to get current status and show it via callback
+            if let Some(ref cb) = callback {
+                // Use get_job_status_raw to get full job details even for in-progress jobs
+                match api.get_job_status_raw(job_id.to_owned()) {
+                    Ok(current_status) => {
+                        last_status = Some(current_status.clone());
+                        cb(&current_status);
+                    }
+                    Err(_) => {
+                        // Error getting status, show last status or fallback message
+                        if let Some(ref status) = last_status {
+                            cb(status);
+                        } else {
+                            println!("⏳ Checking status... (retry in {dur:?})");
+                        }
+                    }
+                }
+            } else {
+                // No callback, use simple message
+                println!("Job: {job_id} didn't finish, retrying in {dur:?}");
+            }
         })
         .call()
         .map_err(|err| match err {
