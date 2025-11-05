@@ -140,6 +140,13 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - Polling interval changed from exponential backoff to fixed 2-second intervals
 
 ### Fixed
+- Improved contract file detection with pattern-based search and case-insensitive matching
+  - Added `find_contract_by_pattern()` to search for `#[starknet::contract]` attribute followed by `mod <ContractName>`
+  - Now correctly identifies contract files regardless of file name vs contract name casing mismatch
+  - Example: "Core" contract in `src/core/core.cairo` now correctly detected instead of falling back to `lib.cairo`
+  - Supports various formatting styles (with/without `pub`, different spacing and line breaks)
+  - Fallback heuristics improved with case-insensitive file path matching
+  - Better handling of contracts in subdirectories (e.g., `src/core/core.cairo`)
 - Removed all `clippy::expect_used` warnings by implementing proper error handling
 - Removed all `clippy::unwrap_used` warnings in production and test code
 - Improved error handling edge cases in verification workflow
@@ -155,6 +162,7 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - Fixed clippy warning `manual_flatten` by using `.flatten()` iterator in history query
 - Removed unused DateTime and Duration imports from verification.rs
 - Cleaned up unused Stage and StageStatus types from status output module
+- Fixed clippy warnings `needless_continue` and `needless_range_loop` in file_collector module
 
 ### Dependencies
 - Added `rusqlite` v0.34.0 with bundled SQLite for history database
