@@ -353,10 +353,12 @@ pub fn add_lock_file_if_requested(
 
 /// Find contract file
 ///
-/// Locates the main contract file for verification. Searches in order:
-/// 1. Contract-specific paths (src/{name}.cairo, src/systems/{name}.cairo, src/contracts/{name}.cairo)
-/// 2. Main source files (src/lib.cairo, src/main.cairo)
-/// 3. First Cairo file in the package
+/// Locates the main contract file for verification by searching for the actual
+/// contract definition in the source code. Searches in order:
+/// 1. Pattern-based search: Find `#[starknet::contract]` followed by `mod <ContractName>`
+/// 2. Fallback heuristics: Contract-specific paths based on name
+/// 3. Main source files (src/lib.cairo, src/main.cairo)
+/// 4. First Cairo file in the package
 ///
 /// # Arguments
 ///
@@ -376,16 +378,38 @@ pub fn find_contract_file(
     sources: &[Utf8PathBuf],
     contract_name: &str,
 ) -> Result<Utf8PathBuf, CliError> {
-    // First try to find a file that matches the contract name
+    // First, search for the actual contract definition pattern
+    // Look for #[starknet::contract] followed by mod <ContractName>
+    debug!(
+        "Searching for contract definition pattern: #[starknet::contract] + mod {}",
+        contract_name
+    );
+
+    if let Some(contract_file) =
+        find_contract_by_pattern(sources, contract_name, &package_meta.root)
+    {
+        debug!("Found contract definition in: {}", contract_file);
+        return Ok(contract_file);
+    }
+
+    debug!("Contract definition pattern not found, falling back to heuristics");
+
+    // Fallback: Try to find a file that matches the contract name (case-insensitive)
     let contract_specific_paths = vec![
-        format!("src/{}.cairo", contract_name),
-        format!("src/systems/{}.cairo", contract_name),
-        format!("src/contracts/{}.cairo", contract_name),
+        format!("src/{}.cairo", contract_name.to_lowercase()),
+        format!(
+            "src/{}/{}.cairo",
+            contract_name.to_lowercase(),
+            contract_name.to_lowercase()
+        ),
+        format!("src/systems/{}.cairo", contract_name.to_lowercase()),
+        format!("src/contracts/{}.cairo", contract_name.to_lowercase()),
     ];
 
     for path in contract_specific_paths {
         let full_path = package_meta.root.join(&path);
         if full_path.exists() {
+            debug!("Found contract file via heuristic: {}", full_path);
             return Ok(full_path);
         }
     }
@@ -396,6 +420,10 @@ pub fn find_contract_file(
     for path in possible_main_paths {
         let full_path = package_meta.root.join(path);
         if full_path.exists() {
+            warn!(
+                "Using fallback main file {} - could not find specific contract file for {}",
+                path, contract_name
+            );
             return Ok(full_path);
         }
     }
@@ -408,7 +436,150 @@ pub fn find_contract_file(
         .cloned()
         .ok_or(CliError::NoTarget)?;
 
+    warn!(
+        "Using first Cairo file {} - could not find specific contract file for {}",
+        contract_file_path, contract_name
+    );
     Ok(contract_file_path)
+}
+
+/// Find contract file by searching for the Starknet contract definition pattern
+///
+/// Searches through all Cairo source files for the pattern:
+/// ```cairo
+/// #[starknet::contract]
+/// pub mod <ContractName> {
+/// ```
+///
+/// # Arguments
+///
+/// * `sources` - All source files to search
+/// * `contract_name` - Name of the contract module to find
+/// * `package_root` - Root directory of the package
+///
+/// # Returns
+///
+/// Returns the path to the file containing the contract definition, or None if not found
+fn find_contract_by_pattern(
+    sources: &[Utf8PathBuf],
+    contract_name: &str,
+    package_root: &Utf8Path,
+) -> Option<Utf8PathBuf> {
+    // Filter to only Cairo files in this package
+    let cairo_files: Vec<&Utf8PathBuf> = sources
+        .iter()
+        .filter(|path| path.starts_with(package_root))
+        .filter(|path| path.extension() == Some("cairo"))
+        .collect();
+
+    debug!(
+        "Searching {} Cairo files for contract pattern",
+        cairo_files.len()
+    );
+
+    for file_path in cairo_files {
+        match std::fs::read_to_string(file_path) {
+            Ok(content) => {
+                if contains_contract_definition(&content, contract_name) {
+                    debug!("Found contract '{}' in file: {}", contract_name, file_path);
+                    return Some(file_path.clone());
+                }
+            }
+            Err(e) => {
+                debug!("Failed to read file {}: {}", file_path, e);
+            }
+        }
+    }
+
+    None
+}
+
+/// Check if file content contains the contract definition pattern
+///
+/// Looks for `#[starknet::contract]` attribute followed by a module declaration
+/// matching the contract name. Handles various formatting patterns.
+///
+/// # Arguments
+///
+/// * `content` - File content to search
+/// * `contract_name` - Name of the contract module to find
+///
+/// # Returns
+///
+/// Returns true if the contract definition is found
+fn contains_contract_definition(content: &str, contract_name: &str) -> bool {
+    let lines: Vec<&str> = content.lines().collect();
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Look for #[starknet::contract] attribute
+        if trimmed.starts_with("#[starknet::contract]") {
+            // Check the next few lines for the module definition
+            let end_index = std::cmp::min(i + 5, lines.len());
+            for next_line in lines.iter().skip(i + 1).take(end_index - (i + 1)) {
+                let next_line = next_line.trim();
+
+                // Skip empty lines and comments
+                if next_line.is_empty() || next_line.starts_with("//") {
+                    continue;
+                }
+
+                // Look for module declaration: "pub mod ContractName" or "mod ContractName"
+                if let Some(module_name) = extract_module_name(next_line) {
+                    if module_name == contract_name {
+                        return true;
+                    }
+                    // If we found a different module name, this isn't our contract
+                    break;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Extract module name from a Cairo module declaration line
+///
+/// Handles patterns like:
+/// - `pub mod ContractName {`
+/// - `mod ContractName {`
+/// - `pub mod ContractName{`
+///
+/// # Arguments
+///
+/// * `line` - Line to extract module name from
+///
+/// # Returns
+///
+/// Returns the module name if found
+fn extract_module_name(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+
+    // Remove "pub " prefix if present
+    let without_pub = if let Some(rest) = trimmed.strip_prefix("pub ") {
+        rest.trim()
+    } else {
+        trimmed
+    };
+
+    // Check for "mod " prefix
+    if let Some(rest) = without_pub.strip_prefix("mod ") {
+        let rest = rest.trim();
+
+        // Extract module name (until { or whitespace)
+        let name = rest
+            .split(|c: char| c == '{' || c.is_whitespace())
+            .next()?
+            .trim();
+
+        if !name.is_empty() {
+            return Some(name.to_string());
+        }
+    }
+
+    None
 }
 
 /// Prepare project directory path
