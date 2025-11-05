@@ -15,7 +15,7 @@ pub struct VerificationJobDispatch {
     pub job_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct VerificationJob {
     pub job_id: String,
     pub status: VerifyJobStatus,
