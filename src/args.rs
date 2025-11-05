@@ -503,15 +503,13 @@ impl clap::FromArgMatches for Network {
                 url: Url::parse("https://api.voyager.online/beta").unwrap(),
             })
         } else {
-            let url = matches
-                .get_one::<Url>("url")
-                .ok_or_else(|| {
-                    clap::Error::raw(
-                        clap::error::ErrorKind::MissingRequiredArgument,
-                        "API URL is required when not using predefined networks",
-                    )
-                })?
-                .clone();
+            // Get URL from CLI args if provided, otherwise use a placeholder
+            // that will be replaced by config file or cause a validation error later
+            let url = matches.get_one::<Url>("url").cloned().unwrap_or_else(|| {
+                // SAFETY: Hardcoded URL is guaranteed to be valid
+                #[allow(clippy::unwrap_used)]
+                Url::parse("https://placeholder.invalid").unwrap()
+            });
 
             Ok(Self { url })
         }
@@ -534,16 +532,11 @@ impl clap::FromArgMatches for Network {
         let wizard_mode = matches.get_one::<bool>("wizard").copied().unwrap_or(false);
 
         if !wizard_mode {
-            // Only update URL if not in wizard mode
-            self.url = matches
-                .get_one::<Url>("url")
-                .ok_or_else(|| {
-                    clap::Error::raw(
-                        clap::error::ErrorKind::MissingRequiredArgument,
-                        "API URL is required when not using predefined networks",
-                    )
-                })?
-                .clone();
+            // Get URL from CLI args if provided
+            if let Some(url) = matches.get_one::<Url>("url") {
+                self.url = url.clone();
+            }
+            // If not provided, keep existing URL (may be from config or placeholder)
         }
         // In wizard mode, keep the placeholder URL (will be replaced by wizard)
         Ok(())
@@ -556,7 +549,7 @@ impl clap::Args for Network {
         cmd.arg(
             clap::Arg::new("url")
                 .long("url")
-                .help("API endpoint URL (required when --network is not specified)")
+                .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
                 .value_parser(Url::parse)
                 .default_value_ifs([
@@ -567,8 +560,7 @@ impl clap::Args for Network {
                         "https://sepolia-api.voyager.online/beta",
                     ),
                     ("network", "dev", "https://dev-api.voyager.online/beta"),
-                ])
-                .required_unless_present_any(["network", "wizard"]),
+                ]),
         )
     }
 
@@ -576,7 +568,7 @@ impl clap::Args for Network {
         cmd.arg(
             clap::Arg::new("url")
                 .long("url")
-                .help("API endpoint URL (required when --network is not specified)")
+                .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
                 .value_parser(Url::parse)
                 .default_value_ifs([
@@ -587,8 +579,140 @@ impl clap::Args for Network {
                         "https://sepolia-api.voyager.online/beta",
                     ),
                     ("network", "dev", "https://dev-api.voyager.online/beta"),
-                ])
-                .required_unless_present_any(["network", "wizard"]),
+                ]),
         )
+    }
+}
+
+impl VerifyArgs {
+    /// Merge configuration file values with CLI arguments
+    /// CLI arguments take precedence over config file values
+    pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
+        // Merge network if not provided via CLI
+        if self.network.is_none() {
+            self.network = config.parse_network();
+        }
+
+        // Merge license if not provided via CLI
+        if self.license.is_none() {
+            if let Some(ref license_str) = config.voyager.license {
+                self.license = license_value_parser(license_str).ok();
+            }
+        }
+
+        // Merge watch flag (only if not explicitly set via CLI)
+        // Note: clap sets default_value_t, so we need to check if it was actually provided
+        // For now, we'll use the config value if it exists
+        if let Some(watch) = config.voyager.watch {
+            if !self.watch {
+                // Only override if CLI value is false (the default)
+                self.watch = watch;
+            }
+        }
+
+        // Merge test_files flag
+        if let Some(test_files) = config.voyager.test_files {
+            if !self.test_files {
+                self.test_files = test_files;
+            }
+        }
+
+        // Merge lock_file flag
+        if let Some(lock_file) = config.voyager.lock_file {
+            if !self.lock_file {
+                self.lock_file = lock_file;
+            }
+        }
+
+        // Merge verbose flag
+        if let Some(verbose) = config.voyager.verbose {
+            if !self.verbose {
+                self.verbose = verbose;
+            }
+        }
+
+        // Merge package if not provided via CLI
+        if self.package.is_none() {
+            self.package = config.workspace.default_package.clone();
+        }
+
+        // Merge project_type if specified in config
+        if let Some(ref project_type_str) = config.voyager.project_type {
+            // Only override if still set to Auto
+            if matches!(self.project_type, ProjectType::Auto) {
+                self.project_type = match project_type_str.to_lowercase().as_str() {
+                    "scarb" => ProjectType::Scarb,
+                    "dojo" => ProjectType::Dojo,
+                    "auto" => ProjectType::Auto,
+                    _ => self.project_type, // Keep existing if invalid
+                };
+            }
+        }
+
+        // Merge URL if provided in config and not set via CLI or network flag
+        // Check if URL is still the placeholder (means neither --url nor --network was provided)
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            if let Some(ref url_str) = config.voyager.url {
+                if let Ok(parsed_url) = Url::parse(url_str) {
+                    self.network_url.url = parsed_url;
+                }
+            }
+        }
+
+        self
+    }
+
+    /// Validate that all required fields are set after config merging
+    pub fn validate(&self) -> Result<(), String> {
+        // Check if URL is still the placeholder (means no network, no url, and no config)
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            return Err(
+                "API URL is required. Provide --network, --url, or set 'network' or 'url' in .voyager.toml".to_string()
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl StatusArgs {
+    /// Merge configuration file values with CLI arguments
+    /// CLI arguments take precedence over config file values
+    pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
+        // Merge network if not provided via CLI
+        if self.network.is_none() {
+            self.network = config.parse_network();
+        }
+
+        // Merge verbose flag
+        if let Some(verbose) = config.voyager.verbose {
+            if !self.verbose {
+                self.verbose = verbose;
+            }
+        }
+
+        // Merge URL if provided in config and not set via CLI or network flag
+        // Check if URL is still the placeholder (means neither --url nor --network was provided)
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            if let Some(ref url_str) = config.voyager.url {
+                if let Ok(parsed_url) = Url::parse(url_str) {
+                    self.network_url.url = parsed_url;
+                }
+            }
+        }
+
+        self
+    }
+
+    /// Validate that all required fields are set after config merging
+    pub fn validate(&self) -> Result<(), String> {
+        // Check if URL is still the placeholder (means no network, no url, and no config)
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            return Err(
+                "API URL is required. Provide --network, --url, or set 'network' or 'url' in .voyager.toml".to_string()
+            );
+        }
+
+        Ok(())
     }
 }

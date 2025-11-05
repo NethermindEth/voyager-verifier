@@ -68,3 +68,6 @@ pub mod file_collector;
 
 /// Interactive verification wizard for guided contract verification
 pub mod wizard;
+
+/// Configuration file support for .voyager.toml files
+pub mod config;
