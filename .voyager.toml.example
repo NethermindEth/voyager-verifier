@@ -1,0 +1,94 @@
+# Example Voyager Verifier Configuration File
+#
+# This file reduces command-line verbosity by providing default values
+# for common verification options. CLI arguments always take precedence
+# over config file values.
+#
+# To use this file, copy it to `.voyager.toml` in your project root:
+#   cp .voyager.toml.example .voyager.toml
+#
+# The verifier will search for .voyager.toml in the current directory
+# and parent directories, using the first one it finds.
+
+[voyager]
+# Network to verify on (mainnet, sepolia, dev)
+# Overridden by: --network
+network = "mainnet"
+
+# SPDX license identifier (e.g., MIT, Apache-2.0, GPL-3.0, BSD-3-Clause)
+# Overridden by: --license
+# If not set here or via CLI, will attempt to read from Scarb.toml
+license = "MIT"
+
+# Wait indefinitely for verification result (polls until completion)
+# Overridden by: --watch
+# Default: false
+watch = true
+
+# Include test files from src/ directory in verification submission
+# Overridden by: --test-files
+# Default: false
+test-files = false
+
+# Include Scarb.lock file in verification submission
+# Overridden by: --lock-file
+# Default: false
+lock-file = true
+
+# Show detailed error messages from the remote compiler
+# Overridden by: --verbose or -v
+# Default: false
+verbose = false
+
+# Custom API endpoint URL (alternative to using --network)
+# Overridden by: --url
+# Uncomment to use a custom endpoint:
+# url = "https://api.custom.com/beta"
+
+# Project type for build tool selection (scarb, dojo, auto)
+# Overridden by: --project-type
+# Default: auto
+# project-type = "scarb"
+
+[workspace]
+# Default package for verification in workspace projects
+# Overridden by: --package
+# Useful when your workspace has multiple packages
+# default-package = "my_contract"
+
+# Example configurations for different scenarios:
+
+# Production deployment configuration:
+# [voyager]
+# network = "mainnet"
+# license = "Apache-2.0"
+# watch = true
+# test-files = false
+# lock-file = true
+# verbose = false
+
+# Development/testing configuration:
+# [voyager]
+# network = "sepolia"
+# license = "MIT"
+# watch = true
+# test-files = true
+# lock-file = true
+# verbose = true
+
+# CI/CD configuration:
+# [voyager]
+# network = "mainnet"
+# watch = false  # Don't block CI pipeline
+# test-files = false
+# lock-file = true
+# verbose = true  # Get detailed logs
+
+# Dojo project configuration:
+# [voyager]
+# network = "mainnet"
+# license = "MIT"
+# project-type = "dojo"
+# watch = true
+# test-files = false
+# lock-file = true
