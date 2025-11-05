@@ -239,12 +239,12 @@ pub enum Commands {
     ///   voyager verify --network mainnet \
     ///     --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18 \
     ///     --contract-name `MyContract`
-    ///   
+    ///
     ///   # Using development network
     ///   voyager verify --network dev \
     ///     --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18 \
     ///     --contract-name `MyContract`
-    ///   
+    ///
     ///   # Using custom API endpoint
     ///   voyager verify --url <https://api.custom.com/beta> \
     ///     --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18 \
@@ -259,13 +259,40 @@ pub enum Commands {
     /// Examples:
     ///   # Using predefined network
     ///   voyager status --network mainnet --job 12345678-1234-1234-1234-123456789012
-    ///   
+    ///
     ///   # Using development network
     ///   voyager status --network dev --job 12345678-1234-1234-1234-123456789012
-    ///   
+    ///
     ///   # Using custom API endpoint
     ///   voyager status --url <https://api.custom.com/beta> --job 12345678-1234-1234-1234-123456789012
     Status(StatusArgs),
+
+    /// Manage verification history
+    ///
+    /// Track and query past verification jobs stored locally in ~/.voyager/history.db
+    ///
+    /// Examples:
+    ///   # List all verification jobs
+    ///   voyager history list
+    ///
+    ///   # List successful verifications only
+    ///   voyager history list --status success
+    ///
+    ///   # List jobs for specific network
+    ///   voyager history list --network mainnet
+    ///
+    ///   # Get status of a specific job
+    ///   voyager history status --job 12345678-1234-1234-1234-123456789012
+    ///
+    ///   # Re-check status of pending jobs
+    ///   voyager history recheck
+    ///
+    ///   # Clean old entries
+    ///   voyager history clean --older-than 30
+    ///
+    ///   # Show statistics
+    ///   voyager history stats
+    History(HistoryArgs),
 }
 
 pub fn license_value_parser(license: &str) -> Result<LicenseId, String> {
@@ -452,6 +479,11 @@ pub struct VerifyArgs {
     /// Run interactive verification wizard
     #[arg(long, default_value_t = false)]
     pub wizard: bool,
+
+    /// Send desktop notifications when verification completes (requires --watch)
+    #[cfg(feature = "notifications")]
+    #[arg(long, default_value_t = false)]
+    pub notify: bool,
 }
 
 #[derive(clap::Args)]
@@ -715,4 +747,78 @@ impl StatusArgs {
 
         Ok(())
     }
+}
+
+#[derive(clap::Args)]
+pub struct HistoryArgs {
+    #[command(subcommand)]
+    pub command: HistoryCommands,
+}
+
+#[derive(clap::Subcommand)]
+pub enum HistoryCommands {
+    /// List verification jobs from history
+    List {
+        /// Filter by status (Success, Fail, `CompileFailed`, Submitted, Processing, Compiled)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Filter by network (mainnet, sepolia, dev)
+        #[arg(long)]
+        network: Option<String>,
+
+        /// Limit the number of results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Get detailed status of a verification job from history
+    Status {
+        /// Verification job ID (UUID format)
+        #[arg(long, value_name = "UUID")]
+        job: String,
+
+        /// Network to verify on (mainnet, sepolia, dev). If not specified, --url is required
+        #[arg(long, value_enum)]
+        network: Option<NetworkKind>,
+
+        #[command(flatten)]
+        network_url: Network,
+
+        /// Re-check the status from the API and update local database
+        #[arg(long, default_value_t = false)]
+        refresh: bool,
+
+        /// Show detailed error messages from the remote compiler
+        #[arg(long, short = 'v', default_value_t = false)]
+        verbose: bool,
+    },
+
+    /// Re-check status of all pending verification jobs
+    Recheck {
+        /// Network to verify on (mainnet, sepolia, dev). If not specified, --url is required
+        #[arg(long, value_enum)]
+        network: Option<NetworkKind>,
+
+        #[command(flatten)]
+        network_url: Network,
+
+        /// Show detailed error messages from the remote compiler
+        #[arg(long, short = 'v', default_value_t = false)]
+        verbose: bool,
+    },
+
+    /// Clean old verification records from history
+    Clean {
+        /// Delete records older than N days
+        #[arg(long, value_name = "DAYS")]
+        older_than: Option<u32>,
+
+        /// Delete all records (use with caution)
+        #[arg(long, default_value_t = false)]
+        all: bool,
+    },
+
+    /// Show verification history statistics
+    Stats,
 }

@@ -107,6 +107,8 @@ pub fn run_wizard(project: Project) -> Result<VerifyArgs, CliError> {
         lock_file,
         test_files,
         project_type: ProjectType::Auto,
+        #[cfg(feature = "notifications")]
+        notify: false,
         verbose,
         wizard: true, // Mark as wizard mode
     })

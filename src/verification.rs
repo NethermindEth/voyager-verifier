@@ -15,6 +15,7 @@ use crate::api::{
 use crate::args::VerifyArgs;
 use crate::errors::CliError;
 use crate::file_collector::{log_verification_info, prepare_project_for_verification};
+use crate::history::{HistoryDb, VerificationRecord};
 use crate::license;
 use crate::project::{determine_project_type, extract_dojo_version, ProjectType};
 use crate::resolver::{collect_source_files, gather_packages_and_validate};
@@ -187,6 +188,10 @@ pub fn execute_verification(
     let cairo_version = metadata.app_version_info.cairo.version.clone();
     let scarb_version = metadata.app_version_info.version.clone();
 
+    // Save version strings for history tracking before they are moved
+    let cairo_version_str = cairo_version.to_string();
+    let scarb_version_str = scarb_version.to_string();
+
     // Create project metadata with build tool information
     debug!(
         "Creating ProjectMetadataInfo with project_type: {:?}",
@@ -233,6 +238,9 @@ pub fn execute_verification(
         None
     };
 
+    // Save package name before it's moved
+    let package_name = context.package_meta.name.clone();
+
     let project_meta = ProjectMetadataInfo::new(
         cairo_version,
         scarb_version,
@@ -240,14 +248,14 @@ pub fn execute_verification(
         context.contract_file,
         context.package_meta.name,
         context.project_type,
-        dojo_version,
+        dojo_version.clone(),
     );
     debug!(
         "Created ProjectMetadataInfo with build_tool: {}, dojo_version: {:?}",
         project_meta.build_tool, project_meta.dojo_version
     );
 
-    api_client
+    let job_id = api_client
         .verify_class(
             class_hash,
             Some(license_info.display_string().to_string()),
@@ -255,7 +263,98 @@ pub fn execute_verification(
             project_meta,
             &context.file_infos,
         )
-        .map_err(CliError::from)
+        .map_err(CliError::from)?;
+
+    // Determine network from args
+    let network = if let Some(ref net) = args.network {
+        match net {
+            crate::args::NetworkKind::Mainnet => "mainnet",
+            crate::args::NetworkKind::Sepolia => "sepolia",
+            crate::args::NetworkKind::Dev => "dev",
+        }
+    } else {
+        // Extract from URL if network not specified
+        let url = args.network_url.url.as_str();
+        if url.contains("sepolia") {
+            "sepolia"
+        } else if url.contains("dev") {
+            "dev"
+        } else if url.contains("mainnet") || url.contains("api.voyager.online") {
+            "mainnet"
+        } else {
+            "custom"
+        }
+    };
+
+    // Save verification record to history database
+    if let Err(e) = save_to_history(HistoryParams {
+        job_id: &job_id,
+        class_hash,
+        contract_name,
+        network,
+        cairo_version: &cairo_version_str,
+        scarb_version: &scarb_version_str,
+        dojo_version: dojo_version.as_deref(),
+        package_name: &package_name,
+    }) {
+        warn!("Failed to save verification to history: {e}");
+        // Don't fail the verification if history save fails
+    }
+
+    Ok(job_id)
+}
+
+/// Parameters for saving verification history
+struct HistoryParams<'a> {
+    job_id: &'a str,
+    class_hash: &'a crate::class_hash::ClassHash,
+    contract_name: &'a str,
+    network: &'a str,
+    cairo_version: &'a str,
+    scarb_version: &'a str,
+    dojo_version: Option<&'a str>,
+    package_name: &'a str,
+}
+
+/// Save a verification record to the history database
+fn save_to_history(params: HistoryParams<'_>) -> Result<(), crate::history::HistoryError> {
+    let db = HistoryDb::open()?;
+
+    let record = VerificationRecord::new(
+        params.job_id.to_string(),
+        params.class_hash,
+        params.contract_name.to_string(),
+        params.network.to_string(),
+        VerifyJobStatus::Submitted,
+        Some(params.package_name.to_string()),
+        params.scarb_version.to_string(),
+        params.cairo_version.to_string(),
+        params.dojo_version.map(String::from),
+    );
+
+    db.insert(&record)?;
+    info!("Saved verification record to history database");
+
+    Ok(())
+}
+
+/// Update the status of a verification record in the history database
+fn update_history_status(
+    job_id: &str,
+    status: VerifyJobStatus,
+) -> Result<(), crate::history::HistoryError> {
+    let db = HistoryDb::open()?;
+
+    // Get the existing record to update it
+    if let Some(mut record) = db.get_by_job_id(job_id)? {
+        record.update_status(status);
+        db.update_status(job_id, &record.status, record.completed_at)?;
+        debug!("Updated verification history for job {job_id} to status {status}");
+    } else {
+        debug!("Job {job_id} not found in history database, skipping update");
+    }
+
+    Ok(())
 }
 
 /// Check the status of a verification job
@@ -280,6 +379,12 @@ pub fn execute_verification(
 /// Returns a `CliError` if polling the status fails or the API returns an error.
 pub fn check(api_client: &ApiClient, job_id: &str) -> Result<VerificationJob, CliError> {
     let status = poll_verification_status(api_client, job_id).map_err(CliError::from)?;
+
+    // Update history database with latest status
+    if let Err(e) = update_history_status(job_id, *status.status()) {
+        warn!("Failed to update verification history: {e}");
+        // Don't fail the status check if history update fails
+    }
 
     match status.status() {
         VerifyJobStatus::Success => {
