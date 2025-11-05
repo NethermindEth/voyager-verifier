@@ -139,6 +139,166 @@ voyager status --url https://api.custom.com/beta --job <JOB_ID>
 
 to check the verification status. Afterwards visit [Voyager website](https://sepolia.voyager.online/) and search for your class hash to see the *verified* badge.
 
+## Configuration File
+
+### Overview
+
+To reduce command-line verbosity and enable shareable team configurations, you can create a `.voyager.toml` configuration file in your project root. This allows you to set default values for common verification options.
+
+**Priority:** CLI arguments > Config file > Default values
+
+### Creating a Configuration File
+
+Create a `.voyager.toml` file in your project directory:
+
+```toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+watch = true
+test-files = false
+lock-file = true
+verbose = false
+
+[workspace]
+default-package = "my_contract"
+```
+
+An example configuration file is provided at `.voyager.toml.example` in this repository.
+
+### Configuration File Location
+
+The verifier searches for `.voyager.toml` in:
+1. Current working directory
+2. Parent directories (walking up until a config file is found)
+
+### Available Configuration Options
+
+#### `[voyager]` Section
+
+- **`network`** - Network to verify on (`mainnet`, `sepolia`, `dev`)
+  - Overridden by: `--network`
+
+- **`license`** - SPDX license identifier (e.g., `MIT`, `Apache-2.0`)
+  - Overridden by: `--license`
+  - Falls back to license in `Scarb.toml` if not specified
+
+- **`watch`** - Wait indefinitely for verification result (boolean)
+  - Overridden by: `--watch`
+  - Default: `false`
+
+- **`test-files`** - Include test files from src/ directory (boolean)
+  - Overridden by: `--test-files`
+  - Default: `false`
+
+- **`lock-file`** - Include Scarb.lock file (boolean)
+  - Overridden by: `--lock-file`
+  - Default: `false`
+
+- **`verbose`** - Show detailed error messages (boolean)
+  - Overridden by: `--verbose` or `-v`
+  - Default: `false`
+
+- **`url`** - Custom API endpoint URL (string)
+  - Overridden by: `--url`
+  - Alternative to using `--network`
+
+- **`project-type`** - Project type (`scarb`, `dojo`, `auto`)
+  - Overridden by: `--project-type`
+  - Default: `auto`
+
+#### `[workspace]` Section
+
+- **`default-package`** - Default package for verification in workspace projects
+  - Overridden by: `--package`
+
+### Example Configurations
+
+#### Production Deployment
+
+```toml
+[voyager]
+network = "mainnet"
+license = "Apache-2.0"
+watch = true
+test-files = false
+lock-file = true
+verbose = false
+```
+
+#### Development/Testing
+
+```toml
+[voyager]
+network = "sepolia"
+license = "MIT"
+watch = true
+test-files = true
+lock-file = true
+verbose = true
+```
+
+#### CI/CD
+
+```toml
+[voyager]
+network = "mainnet"
+watch = false  # Don't block CI pipeline
+test-files = false
+lock-file = true
+verbose = true  # Get detailed logs
+```
+
+#### Workspace Project
+
+```toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+watch = true
+
+[workspace]
+default-package = "my_contract"  # No need to specify --package every time
+```
+
+### Benefits
+
+- **Reduce command-line verbosity** - No need to repeatedly specify the same options
+- **Shareable configurations** - Commit `.voyager.toml` to share settings with your team
+- **Per-project settings** - Different projects can have different verification defaults
+- **Environment-specific configs** - Use different configs for dev/staging/production
+
+### Usage with Config File
+
+With a config file in place:
+
+```toml
+# .voyager.toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+watch = true
+lock-file = true
+```
+
+Your verification commands become much simpler:
+
+```bash
+# Before (without config file)
+voyager verify --network mainnet --license MIT --watch --lock-file \
+  --class-hash 0x044dc2b3... --contract-name MyContract
+
+# After (with config file)
+voyager verify --class-hash 0x044dc2b3... --contract-name MyContract
+```
+
+CLI arguments still override config values when needed:
+
+```bash
+# Use sepolia network instead of mainnet (from config)
+voyager verify --network sepolia --class-hash 0x044dc2b3... --contract-name MyContract
+```
+
 ## Detailed information
 
 ### Verification

@@ -15,9 +15,20 @@ of the voyager-verifier tool.
 ### Highlights
 - 🧙 Interactive verification wizard for guided contract verification
 - ⚙️ Improved error handling with proper error types instead of panics
-- 📦 Foundation for configuration file support and additional features
+- 📦 Configuration file support with `.voyager.toml` for reduced command-line verbosity
 
 ### Added
+
+#### Configuration File Support
+- `.voyager.toml` configuration file support for project-level defaults
+  - Automatic discovery in current and parent directories
+  - All verification options configurable (network, license, watch, test-files, lock-file, verbose, url, project-type)
+  - Workspace-specific settings (default-package)
+  - CLI arguments always take precedence over config file values
+  - Validation with helpful error messages when required fields are missing
+  - Example configuration file provided (`.voyager.toml.example`)
+  - New config module with comprehensive documentation and tests
+  - Error codes E030-E032 for config-related errors
 
 #### Interactive Features
 - Interactive verification wizard with `--wizard` flag for guided verification
@@ -36,11 +47,16 @@ of the voyager-verifier tool.
 - `class_hash` and `contract_name` are now optional when using `--wizard` mode
 - All `expect()` calls replaced with proper error handling using `ok_or_else()`
 - Improved logging with safe fallbacks to prevent panics in non-critical operations
+- `--url` and `--network` arguments are now optional when values are provided in `.voyager.toml`
+- Config file values are loaded and merged before validation, enabling config-driven workflows
+- Updated help text for `--url` to mention `.voyager.toml` configuration option
 
 ### Fixed
 - Removed all `clippy::expect_used` warnings by implementing proper error handling
 - Improved error handling edge cases in verification workflow
 - Better handling of missing required fields with actionable error messages
+- All clippy warnings in config module (derive Eq, use Self, documentation backticks, unwrap usage)
+- Config tests now use proper error propagation instead of `.unwrap()` calls
 
 ### Removed
 - Unused Dockerfile
