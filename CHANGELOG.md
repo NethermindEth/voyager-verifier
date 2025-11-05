@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Summary
 Major release focused on workflow efficiency, user experience, and automation capabilities.
 This release includes comprehensive feature additions and represents a significant evolution
-of the voyager-verifier tool with persistent history tracking and desktop notifications.
+of the voyager-verifier tool with persistent history tracking, desktop notifications, and
+batch verification support for multi-contract deployments.
 
 ### Highlights
 - 🧙 Interactive verification wizard for guided contract verification
@@ -19,8 +20,45 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - 📚 Verification history tracking with local database (`~/.voyager/history.db`)
 - 🔔 Desktop notifications for verification completion
 - 📊 Enhanced status output with live progress bars and multiple format options
+- 🚀 Batch verification for verifying multiple contracts in a single command
 
 ### Added
+
+#### Batch Verification
+- Config-based batch verification for verifying multiple contracts at once
+  - Define contracts in `[[contracts]]` array in `.voyager.toml`
+  - Automatic batch mode detection when contracts are defined in config
+  - Sequential submission with individual progress tracking
+  - Live status monitoring for all jobs with inline updates
+  - Continue-on-error by default to verify all contracts even if some fail
+- New batch-specific CLI flags:
+  - `--fail-fast` - Stop batch verification on first failure (default: continue all)
+  - `--batch-delay <SECONDS>` - Add delay between submissions for rate limiting
+- Clean, structured output for batch results:
+  - Contract name and shortened class hash (e.g., `0x0134aec0...b01069`)
+  - Individual status for each contract (Success/Failed/Pending)
+  - Job IDs for successful submissions
+  - Concise error messages for failed submissions
+  - Aggregate summary showing total/submitted/succeeded/failed/pending counts
+- Watch mode support for batch verification:
+  - Monitors all submitted jobs concurrently
+  - Single inline status update showing: `✓ X Succeeded | ⏳ Y Pending | ✗ Z Failed`
+  - No verbose retry messages - clean, minimal output
+  - Final summary when all jobs complete
+- New data structures for batch operations:
+  - `BatchContract` - Contract information for batch processing
+  - `BatchVerificationResult` - Result for individual contract
+  - `BatchVerificationSummary` - Overall batch summary
+- Core batch functions in verification module:
+  - `submit_batch()` - Submit multiple contracts sequentially
+  - `watch_batch()` - Monitor all jobs until completion
+  - `display_batch_summary()` - Show formatted results
+- Validation for batch mode:
+  - Prevents use of `--class-hash` in batch mode
+  - Prevents use of `--wizard` in batch mode
+  - Clear error messages guiding users to correct usage
+- History tracking for all batch verifications
+- Comprehensive documentation in README with examples and use cases
 
 #### Enhanced Status Output
 - Live status updates with real-time progress during verification
@@ -120,7 +158,10 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - All error handling uses proper `Result` types instead of `unwrap()` or `expect()`
 
 ### Changed
-- `class_hash` and `contract_name` are now optional when using `--wizard` mode
+- `class_hash` and `contract_name` are now optional when using `--wizard` mode or batch mode
+  - Required validation now happens after batch mode detection
+  - Clearer error messages with tips for wizard or batch mode
+- `VerifyArgs` now implements `Clone` trait for batch processing
 - All `expect()` calls replaced with proper error handling using `ok_or_else()`
 - Improved logging with safe fallbacks to prevent panics in non-critical operations
 - `--url` and `--network` arguments are now optional when values are provided in `.voyager.toml`
@@ -143,6 +184,11 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
   - Displays file count and file list instead of full file contents for readability
   - Pretty-printed JSON format for easy inspection
   - Helps users verify exact payload before submission
+- Extended `.voyager.toml` configuration structure
+  - New `[[contracts]]` array for batch verification
+  - Each contract specifies `class-hash`, `contract-name`, and optional `package`
+  - New `ContractConfig` struct for contract configuration
+  - Config now includes `contracts: Vec<ContractConfig>` field
 
 ### Fixed
 - Improved contract file detection with pattern-based search and case-insensitive matching
@@ -168,6 +214,13 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
 - Removed unused DateTime and Duration imports from verification.rs
 - Cleaned up unused Stage and StageStatus types from status output module
 - Fixed clippy warnings `needless_continue` and `needless_range_loop` in file_collector module
+- Improved batch verification output formatting for clarity
+  - Contract name now appears first, followed by shortened class hash
+  - Error messages show only first line to avoid overwhelming output
+  - Job IDs and status indented for better readability
+- Removed verbose polling output in batch watch mode
+  - Replaced individual job retry messages with single inline status update
+  - Cleaner, less noisy monitoring experience
 
 ### Dependencies
 - Added `rusqlite` v0.34.0 with bundled SQLite for history database
