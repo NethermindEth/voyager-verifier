@@ -394,7 +394,7 @@ fn package_name_value_parser(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-#[derive(clap::Args)]
+#[derive(clap::Args, Clone)]
 pub struct VerifyArgs {
     /// Network to verify on (mainnet, sepolia, dev). If not specified, --url is required
     #[arg(long, value_enum)]
@@ -421,8 +421,7 @@ pub struct VerifyArgs {
     #[arg(
         long = "class-hash",
         value_name = "HASH",
-        value_parser = ClassHash::new,
-        required_unless_present = "wizard"
+        value_parser = ClassHash::new
     )]
     pub class_hash: Option<ClassHash>,
 
@@ -442,8 +441,7 @@ pub struct VerifyArgs {
     #[arg(
         long = "contract-name",
         value_name = "NAME",
-        value_parser = contract_name_value_parser,
-        required_unless_present = "wizard"
+        value_parser = contract_name_value_parser
     )]
     pub contract_name: Option<String>,
 
@@ -484,6 +482,14 @@ pub struct VerifyArgs {
     #[cfg(feature = "notifications")]
     #[arg(long, default_value_t = false)]
     pub notify: bool,
+
+    /// Stop batch verification on first failure (default: continue all)
+    #[arg(long, default_value_t = false)]
+    pub fail_fast: bool,
+
+    /// Delay in seconds between batch contract submissions (for rate limiting)
+    #[arg(long, value_name = "SECONDS")]
+    pub batch_delay: Option<u64>,
 }
 
 #[derive(clap::Args)]
@@ -633,6 +639,14 @@ impl clap::Args for Network {
 }
 
 impl VerifyArgs {
+    /// Detect if batch mode should be used based on config
+    pub fn is_batch_mode(&self, config: &Option<crate::config::Config>) -> bool {
+        config
+            .as_ref()
+            .map(|cfg| !cfg.contracts.is_empty())
+            .unwrap_or(false)
+    }
+
     /// Merge configuration file values with CLI arguments
     /// CLI arguments take precedence over config file values
     pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {

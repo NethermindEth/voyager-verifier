@@ -63,6 +63,21 @@ impl ConfigError {
     }
 }
 
+/// Configuration for a single contract in batch verification
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct ContractConfig {
+    /// Class hash of the deployed contract to verify
+    pub class_hash: String,
+
+    /// Name of the contract for verification
+    pub contract_name: String,
+
+    /// Optional package name (for workspace projects)
+    /// If not specified, will use `workspace.default_package` or auto-detect
+    pub package: Option<String>,
+}
+
 /// Top-level configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -74,6 +89,11 @@ pub struct Config {
     /// Workspace-specific settings
     #[serde(default)]
     pub workspace: WorkspaceConfig,
+
+    /// Batch verification contracts
+    /// When this array is non-empty, the verifier runs in batch mode
+    #[serde(default)]
+    pub contracts: Vec<ContractConfig>,
 }
 
 /// Voyager verification configuration
@@ -305,5 +325,39 @@ mod tests {
         assert_eq!(config.voyager.network, None);
         assert_eq!(config.voyager.license, None);
         assert_eq!(config.workspace.default_package, None);
+        assert!(config.contracts.is_empty());
+    }
+
+    #[test]
+    fn test_parse_batch_contracts() -> Result<(), Box<dyn std::error::Error>> {
+        let toml = r#"
+            [voyager]
+            network = "mainnet"
+
+            [[contracts]]
+            class-hash = "0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18"
+            contract-name = "MyToken"
+            package = "token"
+
+            [[contracts]]
+            class-hash = "0x055dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da19"
+            contract-name = "MyNFT"
+        "#;
+
+        let config: Config = toml::from_str(toml)?;
+        assert_eq!(config.contracts.len(), 2);
+        assert_eq!(
+            config.contracts[0].class_hash,
+            "0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18"
+        );
+        assert_eq!(config.contracts[0].contract_name, "MyToken");
+        assert_eq!(config.contracts[0].package, Some("token".to_string()));
+        assert_eq!(
+            config.contracts[1].class_hash,
+            "0x055dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da19"
+        );
+        assert_eq!(config.contracts[1].contract_name, "MyNFT");
+        assert_eq!(config.contracts[1].package, None);
+        Ok(())
     }
 }
