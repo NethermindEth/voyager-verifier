@@ -663,6 +663,14 @@ impl VerifyArgs {
             }
         }
 
+        // Merge notify flag
+        #[cfg(feature = "notifications")]
+        if let Some(notify) = config.voyager.notify {
+            if !self.notify {
+                self.notify = notify;
+            }
+        }
+
         // Merge package if not provided via CLI
         if self.package.is_none() {
             self.package = config.workspace.default_package.clone();

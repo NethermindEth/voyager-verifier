@@ -63,7 +63,9 @@ pub fn send_verification_notification(
     #[cfg(target_os = "linux")]
     {
         let urgency = match status {
-            VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => notify_rust::Urgency::Critical,
+            VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => {
+                notify_rust::Urgency::Critical
+            }
             _ => notify_rust::Urgency::Normal,
         };
         notification.urgency(urgency);

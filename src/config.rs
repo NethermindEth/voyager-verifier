@@ -107,6 +107,11 @@ pub struct VoyagerConfig {
 
     /// Project type (scarb, dojo, auto)
     pub project_type: Option<String>,
+
+    /// Send desktop notifications when verification completes (requires watch mode)
+    #[cfg(feature = "notifications")]
+    #[serde(default)]
+    pub notify: Option<bool>,
 }
 
 /// Workspace-specific configuration
@@ -197,6 +202,7 @@ mod tests {
             test-files = false
             lock-file = true
             verbose = false
+            notify = true
             project-type = "scarb"
 
             [workspace]
@@ -210,6 +216,8 @@ mod tests {
         assert_eq!(config.voyager.test_files, Some(false));
         assert_eq!(config.voyager.lock_file, Some(true));
         assert_eq!(config.voyager.verbose, Some(false));
+        #[cfg(feature = "notifications")]
+        assert_eq!(config.voyager.notify, Some(true));
         assert_eq!(config.voyager.project_type, Some("scarb".to_string()));
         assert_eq!(
             config.workspace.default_package,

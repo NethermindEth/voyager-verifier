@@ -40,6 +40,12 @@ lock-file = true
 # Default: false
 verbose = false
 
+# Send desktop notifications when verification completes (requires watch = true)
+# Overridden by: --notify
+# Default: false
+# Note: Only works when watch mode is enabled
+notify = false
+
 # Custom API endpoint URL (alternative to using --network)
 # Overridden by: --url
 # Uncomment to use a custom endpoint:
@@ -63,6 +69,7 @@ verbose = false
 # network = "mainnet"
 # license = "Apache-2.0"
 # watch = true
+# notify = true  # Get notified when verification completes
 # test-files = false
 # lock-file = true
 # verbose = false
@@ -72,6 +79,7 @@ verbose = false
 # network = "sepolia"
 # license = "MIT"
 # watch = true
+# notify = true  # Get notified when verification completes
 # test-files = true
 # lock-file = true
 # verbose = true
@@ -80,6 +88,7 @@ verbose = false
 # [voyager]
 # network = "mainnet"
 # watch = false  # Don't block CI pipeline
+# notify = false  # No notifications in CI
 # test-files = false
 # lock-file = true
 # verbose = true  # Get detailed logs
@@ -90,5 +99,6 @@ verbose = false
 # license = "MIT"
 # project-type = "dojo"
 # watch = true
+# notify = true  # Get notified when verification completes
 # test-files = false
 # lock-file = true

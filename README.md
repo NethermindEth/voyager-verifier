@@ -199,6 +199,12 @@ The verifier searches for `.voyager.toml` in:
   - Overridden by: `--verbose` or `-v`
   - Default: `false`
 
+- **`notify`** - Send desktop notifications when verification completes (boolean)
+  - Overridden by: `--notify`
+  - Default: `false`
+  - Requires: `watch = true`
+  - Note: Only works when watch mode is enabled
+
 - **`url`** - Custom API endpoint URL (string)
   - Overridden by: `--url`
   - Alternative to using `--network`
