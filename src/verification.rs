@@ -528,3 +528,443 @@ pub fn display_verbose_error(error: &CliError) {
         eprintln!("{}\n", "--- End Error Output ---".bright_yellow());
     }
 }
+
+// ============================================================================
+// Batch Verification Support
+// ============================================================================
+
+/// A single contract in a batch verification job
+#[derive(Debug, Clone)]
+pub struct BatchContract {
+    pub class_hash: crate::class_hash::ClassHash,
+    pub contract_name: String,
+    pub package: Option<String>,
+}
+
+/// Result of a batch contract verification
+#[derive(Debug, Clone)]
+pub struct BatchVerificationResult {
+    pub contract: BatchContract,
+    pub job_id: Option<String>,
+    pub status: Option<VerifyJobStatus>,
+    pub error: Option<String>,
+}
+
+/// Summary of batch verification
+#[derive(Debug, Clone)]
+pub struct BatchVerificationSummary {
+    pub total: usize,
+    pub submitted: usize,
+    pub results: Vec<BatchVerificationResult>,
+}
+
+/// Submit multiple contracts for verification in batch mode
+///
+/// This function orchestrates batch verification by:
+/// 1. Parsing contracts from config
+/// 2. Creating individual `VerifyArgs` for each contract
+/// 3. Submitting each contract using existing `submit()` logic
+/// 4. Collecting results and returning summary
+///
+/// # Arguments
+///
+/// * `api_client` - The API client for communicating with the verification service
+/// * `args` - Base verification arguments (network, watch, etc.)
+/// * `config` - Configuration containing the list of contracts to verify
+/// * `license_info` - License information for the contracts
+///
+/// # Returns
+///
+/// Returns a `BatchVerificationSummary` with results for all contracts
+///
+/// # Errors
+///
+/// Returns a `CliError` if batch verification fails critically
+pub fn submit_batch(
+    api_client: &ApiClient,
+    args: &VerifyArgs,
+    config: &crate::config::Config,
+    license_info: &license::LicenseInfo,
+) -> Result<BatchVerificationSummary, CliError> {
+    info!(
+        "🚀 Starting batch verification for {} contracts",
+        config.contracts.len()
+    );
+
+    let mut results = Vec::new();
+    let total = config.contracts.len();
+
+    for (index, contract_config) in config.contracts.iter().enumerate() {
+        println!(
+            "\n{} Verifying: {}",
+            format!("[{}/{}]", index + 1, total).bright_cyan().bold(),
+            contract_config.contract_name.bright_white().bold()
+        );
+
+        // Parse class hash
+        let class_hash = match crate::class_hash::ClassHash::new(&contract_config.class_hash) {
+            Ok(hash) => hash,
+            Err(e) => {
+                let error_msg = format!("Invalid class hash: {}", e);
+                println!("  {} {}", "✗".red().bold(), error_msg.red());
+                if args.fail_fast {
+                    return Err(CliError::from(e));
+                }
+                // Skip this contract and continue with the next one
+                continue;
+            }
+        };
+
+        // Create individual VerifyArgs for this contract
+        let mut contract_args = args.clone();
+        contract_args.class_hash = Some(class_hash.clone());
+        contract_args.contract_name = Some(contract_config.contract_name.clone());
+        contract_args.package = contract_config
+            .package
+            .clone()
+            .or_else(|| contract_args.package.clone());
+
+        // Submit using existing submit() function (reuse all existing logic!)
+        let result = match submit(api_client, &contract_args, license_info) {
+            Ok(job_id) if job_id != "dry-run" => {
+                println!(
+                    "  {} Submitted - Job ID: {}",
+                    "✓".green().bold(),
+                    job_id.green()
+                );
+                BatchVerificationResult {
+                    contract: BatchContract {
+                        class_hash: class_hash.clone(),
+                        contract_name: contract_config.contract_name.clone(),
+                        package: contract_config.package.clone(),
+                    },
+                    job_id: Some(job_id),
+                    status: Some(VerifyJobStatus::Submitted),
+                    error: None,
+                }
+            }
+            Ok(_) => {
+                // dry-run mode
+                BatchVerificationResult {
+                    contract: BatchContract {
+                        class_hash: class_hash.clone(),
+                        contract_name: contract_config.contract_name.clone(),
+                        package: contract_config.package.clone(),
+                    },
+                    job_id: None,
+                    status: None,
+                    error: None,
+                }
+            }
+            Err(e) => {
+                println!("  {} Failed: {}", "✗".red().bold(), e.to_string().red());
+                if args.fail_fast {
+                    return Err(e);
+                }
+                BatchVerificationResult {
+                    contract: BatchContract {
+                        class_hash: class_hash.clone(),
+                        contract_name: contract_config.contract_name.clone(),
+                        package: contract_config.package.clone(),
+                    },
+                    job_id: None,
+                    status: None,
+                    error: Some(e.to_string()),
+                }
+            }
+        };
+
+        results.push(result);
+
+        // Rate limiting delay between submissions
+        if index < total - 1 {
+            if let Some(delay_secs) = args.batch_delay {
+                println!(
+                    "  {} Waiting {} seconds before next submission...",
+                    "⏳".yellow(),
+                    delay_secs
+                );
+                std::thread::sleep(std::time::Duration::from_secs(delay_secs));
+            }
+        }
+    }
+
+    let submitted = results.iter().filter(|r| r.job_id.is_some()).count();
+
+    Ok(BatchVerificationSummary {
+        total,
+        submitted,
+        results,
+    })
+}
+
+/// Watch all batch verification jobs until completion
+///
+/// This function polls all submitted jobs in the batch until they reach
+/// a terminal state (Success, Fail, or `CompileFailed`).
+///
+/// # Arguments
+///
+/// * `api_client` - The API client for communicating with the verification service
+/// * `summary` - The batch summary from initial submission
+/// * `output_format` - The desired output format for status display
+///
+/// # Returns
+///
+/// Returns an updated `BatchVerificationSummary` with final statuses
+///
+/// # Errors
+///
+/// Returns a `CliError` if polling fails critically
+pub fn watch_batch(
+    api_client: &ApiClient,
+    summary: &BatchVerificationSummary,
+    output_format: &crate::args::OutputFormat,
+) -> Result<BatchVerificationSummary, CliError> {
+    let job_ids: Vec<&str> = summary
+        .results
+        .iter()
+        .filter_map(|r| r.job_id.as_deref())
+        .collect();
+
+    if job_ids.is_empty() {
+        return Ok(summary.clone()); // Nothing to watch
+    }
+
+    println!(
+        "\n{} Watching {} verification job(s)...\n",
+        "⏳".yellow(),
+        job_ids.len()
+    );
+
+    let mut updated_results = summary.results.clone();
+    let mut iteration = 0;
+
+    // Poll all jobs until complete
+    loop {
+        let mut all_complete = true;
+        iteration += 1;
+
+        for result in &mut updated_results {
+            if let Some(ref job_id) = result.job_id {
+                // Skip if already in terminal state
+                if matches!(
+                    result.status,
+                    Some(VerifyJobStatus::Success)
+                        | Some(VerifyJobStatus::Fail)
+                        | Some(VerifyJobStatus::CompileFailed)
+                ) {
+                    continue;
+                }
+
+                // Check job status (single API call, no retry)
+                match api_client.get_job_status(job_id.to_string()) {
+                    Ok(Some(status)) => {
+                        let new_status = *status.status();
+                        let status_changed = result.status != Some(new_status);
+                        result.status = Some(new_status);
+
+                        // Check if still pending
+                        if !matches!(
+                            new_status,
+                            VerifyJobStatus::Success
+                                | VerifyJobStatus::Fail
+                                | VerifyJobStatus::CompileFailed
+                        ) {
+                            all_complete = false;
+                        }
+
+                        // Log status change
+                        if status_changed {
+                            debug!("Job {} status changed to {}", job_id, new_status);
+                        }
+                    }
+                    Ok(None) => {
+                        // Job still in progress
+                        all_complete = false;
+                    }
+                    Err(e) => {
+                        warn!("Failed to check job {}: {}", job_id, e);
+                        result.error = Some(e.to_string());
+                    }
+                }
+            }
+        }
+
+        // Display status update
+        if output_format == &crate::args::OutputFormat::Text {
+            print_batch_status_inline(&updated_results, iteration);
+        }
+
+        if all_complete {
+            println!(); // Newline after inline status
+            break;
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
+    Ok(BatchVerificationSummary {
+        total: summary.total,
+        submitted: summary.submitted,
+        results: updated_results,
+    })
+}
+
+/// Print batch verification status inline (for live updates)
+fn print_batch_status_inline(results: &[BatchVerificationResult], _iteration: u32) {
+    let succeeded = results
+        .iter()
+        .filter(|r| matches!(r.status, Some(VerifyJobStatus::Success)))
+        .count();
+
+    let failed = results
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                Some(VerifyJobStatus::Fail) | Some(VerifyJobStatus::CompileFailed)
+            ) || r.error.is_some()
+        })
+        .count();
+
+    let pending = results
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                Some(VerifyJobStatus::Submitted)
+                    | Some(VerifyJobStatus::Processing)
+                    | Some(VerifyJobStatus::Compiled)
+            )
+        })
+        .count();
+
+    print!(
+        "\r\x1B[2K  {} {} | {} {} | {} {}",
+        "✓".green(),
+        format!("{} Succeeded", succeeded).green(),
+        "⏳".yellow(),
+        format!("{} Pending", pending).yellow(),
+        "✗".red(),
+        format!("{} Failed", failed).red()
+    );
+    use std::io::Write;
+    std::io::stdout().flush().ok();
+}
+
+/// Display batch verification summary
+///
+/// Shows a formatted summary of the batch verification results including
+/// total contracts, submission counts, and success/failure statistics.
+///
+/// # Arguments
+///
+/// * `summary` - The batch verification summary to display
+pub fn display_batch_summary(summary: &BatchVerificationSummary) {
+    let succeeded = summary
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, Some(VerifyJobStatus::Success)))
+        .count();
+
+    let failed = summary
+        .results
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                Some(VerifyJobStatus::Fail) | Some(VerifyJobStatus::CompileFailed)
+            ) || r.error.is_some()
+        })
+        .count();
+
+    let pending = summary
+        .results
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                Some(VerifyJobStatus::Submitted)
+                    | Some(VerifyJobStatus::Processing)
+                    | Some(VerifyJobStatus::Compiled)
+            )
+        })
+        .count();
+
+    println!("\n{}", "═".repeat(60).bright_cyan());
+    println!("{}", "Batch Verification Summary".bright_cyan().bold());
+    println!("{}", "═".repeat(60).bright_cyan());
+    println!("Total contracts:  {}", summary.total);
+    println!("Submitted:        {}", summary.submitted.to_string().cyan());
+    println!("Succeeded:        {}", succeeded.to_string().green());
+    println!("Failed:           {}", failed.to_string().red());
+    println!("Pending:          {}", pending.to_string().yellow());
+    println!("{}", "═".repeat(60).bright_cyan());
+
+    // Show detailed results
+    println!("\n{}", "Contract Details:".bright_white().bold());
+    for result in &summary.results {
+        let contract_name = result.contract.contract_name.bright_white().bold();
+        let class_hash_short = format!(
+            "{}...{}",
+            &result.contract.class_hash.to_string()[..10],
+            &result.contract.class_hash.to_string()
+                [result.contract.class_hash.to_string().len() - 6..]
+        );
+
+        match (&result.status, &result.error) {
+            (Some(VerifyJobStatus::Success), _) => {
+                let job_id = result.job_id.as_deref().unwrap_or("-");
+                println!(
+                    "  {} {} ({})",
+                    "✓".green().bold(),
+                    contract_name,
+                    class_hash_short.bright_black()
+                );
+                println!("    Job ID: {}", job_id.cyan());
+            }
+            (Some(VerifyJobStatus::Fail), _) | (Some(VerifyJobStatus::CompileFailed), _) => {
+                println!(
+                    "  {} {} ({})",
+                    "✗".red().bold(),
+                    contract_name,
+                    class_hash_short.bright_black()
+                );
+                println!("    Status: {}", "Failed".red());
+            }
+            (Some(status), _) => {
+                let job_id = result.job_id.as_deref().unwrap_or("-");
+                println!(
+                    "  {} {} ({})",
+                    "⏳".yellow(),
+                    contract_name,
+                    class_hash_short.bright_black()
+                );
+                println!("    Status: {}", status.to_string().yellow());
+                println!("    Job ID: {}", job_id.cyan());
+            }
+            (None, Some(err)) => {
+                println!(
+                    "  {} {} ({})",
+                    "✗".red().bold(),
+                    contract_name,
+                    class_hash_short.bright_black()
+                );
+                // Extract just the first line of the error (before suggestions)
+                let error_line = err.lines().next().unwrap_or(err);
+                println!("    Error: {}", error_line.red());
+            }
+            (None, None) => {
+                println!(
+                    "  {} {} ({})",
+                    "○".bright_black(),
+                    contract_name,
+                    class_hash_short.bright_black()
+                );
+                println!("    Status: Not submitted");
+            }
+        }
+    }
+    println!();
+}
