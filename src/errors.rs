@@ -336,6 +336,9 @@ pub enum CliError {
     Api(#[from] ApiClientError),
 
     #[error(transparent)]
+    ClassHash(#[from] crate::class_hash::ClassHashError),
+
+    #[error(transparent)]
     MissingPackage(#[from] MissingPackage),
 
     #[error("[E015] Class hash '{0}' is not declared\n\nSuggestions:\n  • Verify the class hash is correct\n  • Check that the contract has been declared on the network\n  • Ensure you're using the correct network (mainnet/testnet)\n  • Use a block explorer to verify the class hash exists")]
@@ -400,6 +403,7 @@ impl CliError {
         match self {
             Self::Args(_) => "E020",
             Self::Api(e) => e.error_code(),
+            Self::ClassHash(e) => e.error_code(),
             Self::MissingPackage(e) => e.error_code().as_str(),
             Self::NotDeclared(_) => "E015",
             Self::NoTarget => "E016",

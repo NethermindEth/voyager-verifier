@@ -102,3 +102,30 @@ notify = false
 # notify = true  # Get notified when verification completes
 # test-files = false
 # lock-file = true
+
+# Batch Verification
+# When [[contracts]] array is defined, voyager runs in batch mode
+# Simply run 'voyager verify' without --class-hash to verify all contracts
+# All [voyager] settings above apply to all contracts in the batch
+
+# Example: Verify multiple contracts at once
+# [[contracts]]
+# class-hash = "0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18"
+# contract-name = "MyToken"
+# package = "token"  # Optional - uses workspace.default-package if not specified
+#
+# [[contracts]]
+# class-hash = "0x055dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da19"
+# contract-name = "MyNFT"
+# package = "nft"
+#
+# [[contracts]]
+# class-hash = "0x066dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da20"
+# contract-name = "MyMarketplace"
+# # package omitted - will use workspace.default-package or auto-detect
+
+# Batch verification usage:
+#   voyager verify                    # Verify all contracts from config
+#   voyager verify --watch            # Watch all batch jobs until complete
+#   voyager verify --fail-fast        # Stop on first failure
+#   voyager verify --batch-delay 5    # Add 5s delay between submissions

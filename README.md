@@ -83,6 +83,32 @@ The wizard will prompt you for all required information:
 
 This is the easiest way to verify your contract if you're new to the tool or don't use it frequently.
 
+#### Batch Verification Mode
+
+For verifying multiple contracts at once, define them in `.voyager.toml`:
+
+```toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+
+[[contracts]]
+class-hash = "0x044dc2b3..."
+contract-name = "MyToken"
+
+[[contracts]]
+class-hash = "0x055dc2b3..."
+contract-name = "MyNFT"
+```
+
+Then simply run:
+
+```bash
+voyager verify
+```
+
+See the [Batch Verification](#batch-verification) section for detailed documentation.
+
 #### Command-Line Mode
 
 Once you have the verifier installed, execute:
@@ -303,6 +329,199 @@ CLI arguments still override config values when needed:
 ```bash
 # Use sepolia network instead of mainnet (from config)
 voyager verify --network sepolia --class-hash 0x044dc2b3... --contract-name MyContract
+```
+
+## Batch Verification
+
+### Overview
+
+Batch verification allows you to verify multiple contracts in a single command by defining them in your `.voyager.toml` configuration file. This is particularly useful for:
+- Workspace projects with multiple contracts
+- Multi-contract deployments
+- Verifying entire protocol suites at once
+
+### Setting Up Batch Verification
+
+Add a `[[contracts]]` array to your `.voyager.toml` file:
+
+```toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+watch = true
+
+# Define multiple contracts to verify
+[[contracts]]
+class-hash = "0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18"
+contract-name = "MyToken"
+package = "token"  # Optional - uses workspace.default-package if not specified
+
+[[contracts]]
+class-hash = "0x055dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da19"
+contract-name = "MyNFT"
+package = "nft"
+
+[[contracts]]
+class-hash = "0x066dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da20"
+contract-name = "MyMarketplace"
+# package omitted - will use workspace.default-package or auto-detect
+```
+
+### Running Batch Verification
+
+Once contracts are defined in your config file, simply run:
+
+```bash
+voyager verify
+```
+
+The tool automatically detects batch mode when the `[[contracts]]` array is present and verifies all contracts sequentially.
+
+### Batch Verification Options
+
+Control batch behavior with additional flags:
+
+```bash
+# Wait for all verifications to complete
+voyager verify --watch
+
+# Stop on first failure (default: continue all)
+voyager verify --fail-fast
+
+# Add delay between submissions (rate limiting)
+voyager verify --batch-delay 10
+
+# Combine options
+voyager verify --watch --batch-delay 5 --verbose
+```
+
+### Available Flags
+
+- `--watch` - Monitor all verification jobs until completion
+- `--fail-fast` - Stop batch on first failure (default: continue with remaining contracts)
+- `--batch-delay <SECONDS>` - Add delay between submissions for rate limiting
+- `--verbose` - Show detailed error messages for failed verifications
+
+### Example Output
+
+```
+[1/3] Verifying: MyToken
+  ✓ Submitted - Job ID: abc-123-def
+
+[2/3] Verifying: MyNFT
+  ⏳ Waiting 5 seconds before next submission...
+  ✓ Submitted - Job ID: ghi-456-jkl
+
+[3/3] Verifying: MyMarketplace
+  ✓ Submitted - Job ID: mno-789-pqr
+
+════════════════════════════════════════════════════════
+Batch Verification Summary
+════════════════════════════════════════════════════════
+Total contracts:  3
+Submitted:        3
+Succeeded:        0
+Failed:           0
+Pending:          3
+════════════════════════════════════════════════════════
+
+Contract Details:
+  ⏳ Submitted MyToken (Job: abc-123-def)
+  ⏳ Submitted MyNFT (Job: ghi-456-jkl)
+  ⏳ Submitted MyMarketplace (Job: mno-789-pqr)
+```
+
+With `--watch` enabled, the tool monitors all jobs and displays live updates:
+
+```
+⏳ Watching 3 verification job(s)...
+
+  ✓ 2 Succeeded | ⏳ 1 Pending | ✗ 0 Failed
+
+=== Final Summary ===
+════════════════════════════════════════════════════════
+Batch Verification Summary
+════════════════════════════════════════════════════════
+Total contracts:  3
+Submitted:        3
+Succeeded:        3
+Failed:           0
+Pending:          0
+════════════════════════════════════════════════════════
+
+Contract Details:
+  ✓ Success MyToken (Job: abc-123-def)
+  ✓ Success MyNFT (Job: ghi-456-jkl)
+  ✓ Success MyMarketplace (Job: mno-789-pqr)
+```
+
+### Important Notes
+
+- **Auto-detection**: Batch mode is automatically enabled when `[[contracts]]` array exists in config
+- **Incompatible flags**: Cannot use `--class-hash`, `--contract-name`, or `--wizard` with batch mode
+- **Shared settings**: All contracts in a batch use the same `[voyager]` settings (network, license, etc.)
+- **Package resolution**: If `package` is omitted, the tool uses `workspace.default-package` or auto-detects
+- **Error handling**: By default, continues with remaining contracts if one fails (use `--fail-fast` to stop)
+- **History tracking**: All batch verifications are tracked in the history database
+
+### Use Cases
+
+#### Multi-Contract Workspace
+
+```toml
+[voyager]
+network = "mainnet"
+license = "MIT"
+watch = true
+
+[workspace]
+default-package = "contracts"
+
+[[contracts]]
+class-hash = "0x123..."
+contract-name = "Token"
+
+[[contracts]]
+class-hash = "0x456..."
+contract-name = "NFT"
+
+[[contracts]]
+class-hash = "0x789..."
+contract-name = "Marketplace"
+```
+
+#### Protocol Suite Deployment
+
+```toml
+[voyager]
+network = "mainnet"
+license = "Apache-2.0"
+watch = true
+lock-file = true
+
+[[contracts]]
+class-hash = "0xabc..."
+contract-name = "CoreProtocol"
+package = "core"
+
+[[contracts]]
+class-hash = "0xdef..."
+contract-name = "GovernanceModule"
+package = "governance"
+
+[[contracts]]
+class-hash = "0x012..."
+contract-name = "TreasuryModule"
+package = "treasury"
+```
+
+#### Rate-Limited Batch
+
+For deployments requiring rate limiting:
+
+```bash
+# Submit with 10-second delay between contracts
+voyager verify --batch-delay 10 --watch
 ```
 
 ## Verification History
