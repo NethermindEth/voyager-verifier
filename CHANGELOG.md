@@ -138,6 +138,11 @@ of the voyager-verifier tool with persistent history tracking and desktop notifi
   - `check()` now accepts `OutputFormat` parameter for flexible output formatting
 - `VerificationJob` now implements `Clone` trait for status caching during polling
 - Polling interval changed from exponential backoff to fixed 2-second intervals
+- Enhanced dry-run output to display complete API request payload
+  - Shows all metadata fields (compiler_version, scarb_version, build_tool, license, etc.)
+  - Displays file count and file list instead of full file contents for readability
+  - Pretty-printed JSON format for easy inspection
+  - Helps users verify exact payload before submission
 
 ### Fixed
 - Improved contract file detection with pattern-based search and case-insensitive matching

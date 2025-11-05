@@ -131,10 +131,80 @@ pub fn submit(
         return execute_verification(api_client, args, context, license_info);
     }
 
+    // Dry run: Build and display the full payload that would be sent
     println!("\n✅ Dry run completed successfully!");
     println!("Collected {} file(s) for verification", file_infos.len());
     println!("Contract: {}", contract_name);
     println!("Class hash: {}", class_hash);
+
+    // Build the complete payload
+    let cairo_version = metadata.app_version_info.cairo.version.clone();
+    let scarb_version = metadata.app_version_info.version.clone();
+
+    // Extract Dojo version if it's a Dojo project (same logic as execute_verification)
+    let dojo_version = if project_type == ProjectType::Dojo {
+        let workspace_root = args.path.root_dir().to_string();
+        let package_root = package_meta.root.to_string();
+        let package_root_opt = if package_root != workspace_root {
+            Some(package_root.as_str())
+        } else {
+            None
+        };
+        extract_dojo_version(&workspace_root, package_root_opt)
+    } else {
+        None
+    };
+
+    // Prepare license value (same logic as in API client)
+    let license_str = license_info.display_string().to_string();
+    let license_value = if license_str == "MIT" {
+        "MIT".to_string()
+    } else {
+        license_str
+    };
+
+    // Build the request payload structure (without file contents for brevity)
+    #[derive(serde::Serialize)]
+    struct DryRunPayload {
+        compiler_version: String,
+        scarb_version: String,
+        package_name: String,
+        name: String,
+        contract_file: String,
+        #[serde(rename = "contract-name")]
+        contract_name: String,
+        project_dir_path: String,
+        build_tool: String,
+        license: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dojo_version: Option<String>,
+        file_count: usize,
+        file_list: Vec<String>,
+    }
+
+    let payload = DryRunPayload {
+        compiler_version: cairo_version.to_string(),
+        scarb_version: scarb_version.to_string(),
+        package_name: package_meta.name,
+        name: contract_name.to_string(),
+        contract_file: contract_file.clone(),
+        contract_name: contract_file,
+        project_dir_path,
+        build_tool: project_type.to_string(),
+        license: license_value,
+        dojo_version,
+        file_count: file_infos.len(),
+        file_list: file_infos.iter().map(|f| f.name.clone()).collect(),
+    };
+
+    // Display the payload as pretty-printed JSON
+    println!("\n{}", "=== API Request Payload ===".bright_cyan().bold());
+    match serde_json::to_string_pretty(&payload) {
+        Ok(json) => println!("{}", json),
+        Err(e) => warn!("Failed to serialize payload to JSON: {}", e),
+    }
+    println!("{}\n", "=== End Payload ===".bright_cyan().bold());
+
     println!("\n⚠️  No verification was submitted due to --dry-run flag");
     println!("Remove --dry-run to submit for actual verification.\n");
     Ok("dry-run".to_string())
