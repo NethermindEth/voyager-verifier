@@ -32,23 +32,20 @@ pub fn send_verification_notification(
     status: VerifyJobStatus,
     job_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (summary, body, urgency) = match status {
+    let (summary, body) = match status {
         VerifyJobStatus::Success => (
             "✅ Verification Successful",
             format!(
                 "Contract '{contract_name}' has been successfully verified!\n\nJob ID: {job_id}"
             ),
-            notify_rust::Urgency::Normal,
         ),
         VerifyJobStatus::Fail => (
             "❌ Verification Failed",
             format!("Contract '{contract_name}' verification failed.\n\nJob ID: {job_id}"),
-            notify_rust::Urgency::Critical,
         ),
         VerifyJobStatus::CompileFailed => (
             "❌ Compilation Failed",
             format!("Contract '{contract_name}' compilation failed.\n\nJob ID: {job_id}"),
-            notify_rust::Urgency::Critical,
         ),
         _ => {
             // Don't send notifications for non-terminal states
@@ -56,12 +53,23 @@ pub fn send_verification_notification(
         }
     };
 
-    Notification::new()
+    let mut notification = Notification::new();
+    notification
         .summary(summary)
         .body(&body)
-        .urgency(urgency)
-        .timeout(notify_rust::Timeout::Milliseconds(6000))
-        .show()?;
+        .timeout(notify_rust::Timeout::Milliseconds(6000));
+
+    // Urgency is only supported on Linux (D-Bus notifications)
+    #[cfg(target_os = "linux")]
+    {
+        let urgency = match status {
+            VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => notify_rust::Urgency::Critical,
+            _ => notify_rust::Urgency::Normal,
+        };
+        notification.urgency(urgency);
+    }
+
+    notification.show()?;
 
     Ok(())
 }
