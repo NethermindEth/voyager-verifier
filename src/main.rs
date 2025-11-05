@@ -31,80 +31,174 @@ fn main() -> anyhow::Result<()> {
                 args
             };
 
-            // Validate that all required fields are set
-            if !args.wizard {
-                if let Err(err) = args.validate() {
-                    eprintln!("Error: {err}");
+            // Detect batch mode
+            let is_batch = args.is_batch_mode(&config);
+
+            // Validate based on mode
+            if !is_batch && !args.wizard {
+                // Single verification mode requires class_hash and contract_name
+                if args.class_hash.is_none() {
+                    eprintln!("Error: --class-hash is required for single contract verification");
+                    eprintln!("Tip: Use --wizard for interactive mode or add [[contracts]] to .voyager.toml for batch mode");
+                    std::process::exit(1);
+                }
+                if args.contract_name.is_none() {
+                    eprintln!(
+                        "Error: --contract-name is required for single contract verification"
+                    );
+                    eprintln!("Tip: Use --wizard for interactive mode or add [[contracts]] to .voyager.toml for batch mode");
                     std::process::exit(1);
                 }
             }
 
-            // Check if wizard mode is enabled
-            let args = if args.wizard {
-                // Run the wizard with the already-loaded project
-                wizard::run_wizard(args.path)?
-            } else {
-                args
-            };
+            if is_batch {
+                // ========== BATCH MODE ==========
+                // SAFETY: is_batch is only true when config contains [[contracts]], so config must be Some
+                let cfg = config.as_ref().unwrap_or_else(|| {
+                    unreachable!(
+                        "Config must exist for batch mode - is_batch_mode() guarantees this"
+                    )
+                });
 
-            let api_client = ApiClient::new(args.network_url.url.clone())?;
-
-            let license_info = license::resolve_license_info(
-                args.license,
-                args.path.get_license(),
-                args.path.manifest_path(),
-            );
-
-            license::warn_if_no_license(&license_info);
-
-            let job_id = submit(&api_client, &args, &license_info).map_err(|e| {
-                if args.verbose {
-                    display_verbose_error(&e);
+                // Validate: can't specify --class-hash in batch mode
+                if args.class_hash.is_some() {
+                    eprintln!("Error: Cannot use --class-hash with batch verification.");
+                    eprintln!(
+                        "Remove [[contracts]] from .voyager.toml or remove --class-hash flag."
+                    );
+                    std::process::exit(1);
                 }
-                if let CliError::Api(ApiClientError::Verify(ref verification_error)) = e {
-                    eprintln!("\nSuggestions:");
-                    for suggestion in verification_error.suggestions() {
-                        eprintln!("  • {suggestion}");
-                    }
-                } else if let CliError::Api(ApiClientError::Failure(ref _request_failure)) = e {
-                    // RequestFailure errors already include suggestions in their display
-                }
-                e
-            })?;
-            if job_id != "dry-run" {
-                display_verification_job_id(&job_id);
 
-                // If --watch flag is enabled, poll for verification result
-                if args.watch {
-                    let status = check(&api_client, &job_id, &verifier::args::OutputFormat::Text)
-                        .map_err(|e| {
-                        if args.verbose {
-                            display_verbose_error(&e);
-                        }
-                        if let CliError::Api(ApiClientError::Verify(ref verification_error)) = e {
-                            eprintln!("\nSuggestions:");
-                            for suggestion in verification_error.suggestions() {
-                                eprintln!("  • {suggestion}");
+                // Validate: can't use wizard mode with batch
+                if args.wizard {
+                    eprintln!("Error: Cannot use --wizard with batch verification.");
+                    eprintln!("Remove [[contracts]] from .voyager.toml or remove --wizard flag.");
+                    std::process::exit(1);
+                }
+
+                // Validate URL is set
+                if let Err(err) = args.validate() {
+                    eprintln!("Error: {err}");
+                    std::process::exit(1);
+                }
+
+                let api_client = ApiClient::new(args.network_url.url.clone())?;
+
+                let license_info = license::resolve_license_info(
+                    args.license,
+                    args.path.get_license(),
+                    args.path.manifest_path(),
+                );
+                license::warn_if_no_license(&license_info);
+
+                // Submit batch
+                let summary =
+                    verifier::verification::submit_batch(&api_client, &args, cfg, &license_info)
+                        .inspect_err(|e| {
+                            if args.verbose {
+                                display_verbose_error(e);
                             }
-                        } else if let CliError::Api(ApiClientError::Failure(ref _request_failure)) =
-                            e
-                        {
-                            // RequestFailure errors already include suggestions in their display
-                        }
-                        e
-                    })?;
-                    info!("{status:?}");
+                        })?;
 
-                    // Send desktop notification if enabled
-                    #[cfg(feature = "notifications")]
-                    if args.notify {
-                        if let Some(ref contract_name) = args.contract_name {
-                            if let Err(e) = notifications::send_verification_notification(
-                                contract_name,
-                                *status.status(),
-                                &job_id,
-                            ) {
-                                eprintln!("Warning: Failed to send desktop notification: {e}");
+                // Display summary
+                verifier::verification::display_batch_summary(&summary);
+
+                // Watch mode
+                if args.watch && summary.submitted > 0 {
+                    let final_summary = verifier::verification::watch_batch(
+                        &api_client,
+                        &summary,
+                        &verifier::args::OutputFormat::Text,
+                    )
+                    .inspect_err(|e| {
+                        if args.verbose {
+                            display_verbose_error(e);
+                        }
+                    })?;
+
+                    println!("\n=== Final Summary ===");
+                    verifier::verification::display_batch_summary(&final_summary);
+                }
+            } else {
+                // ========== SINGLE MODE (existing code) ==========
+                // Validate network URL
+                if let Err(err) = args.validate() {
+                    eprintln!("Error: {err}");
+                    std::process::exit(1);
+                }
+
+                // Check if wizard mode is enabled
+                let args = if args.wizard {
+                    // Run the wizard with the already-loaded project
+                    wizard::run_wizard(args.path)?
+                } else {
+                    args
+                };
+
+                let api_client = ApiClient::new(args.network_url.url.clone())?;
+
+                let license_info = license::resolve_license_info(
+                    args.license,
+                    args.path.get_license(),
+                    args.path.manifest_path(),
+                );
+
+                license::warn_if_no_license(&license_info);
+
+                let job_id = submit(&api_client, &args, &license_info).map_err(|e| {
+                    if args.verbose {
+                        display_verbose_error(&e);
+                    }
+                    if let CliError::Api(ApiClientError::Verify(ref verification_error)) = e {
+                        eprintln!("\nSuggestions:");
+                        for suggestion in verification_error.suggestions() {
+                            eprintln!("  • {suggestion}");
+                        }
+                    } else if let CliError::Api(ApiClientError::Failure(ref _request_failure)) = e {
+                        // RequestFailure errors already include suggestions in their display
+                    }
+                    e
+                })?;
+                if job_id != "dry-run" {
+                    display_verification_job_id(&job_id);
+
+                    // If --watch flag is enabled, poll for verification result
+                    if args.watch {
+                        let status =
+                            check(&api_client, &job_id, &verifier::args::OutputFormat::Text)
+                                .map_err(|e| {
+                                    if args.verbose {
+                                        display_verbose_error(&e);
+                                    }
+                                    if let CliError::Api(ApiClientError::Verify(
+                                        ref verification_error,
+                                    )) = e
+                                    {
+                                        eprintln!("\nSuggestions:");
+                                        for suggestion in verification_error.suggestions() {
+                                            eprintln!("  • {suggestion}");
+                                        }
+                                    } else if let CliError::Api(ApiClientError::Failure(
+                                        ref _request_failure,
+                                    )) = e
+                                    {
+                                        // RequestFailure errors already include suggestions in their display
+                                    }
+                                    e
+                                })?;
+                        info!("{status:?}");
+
+                        // Send desktop notification if enabled
+                        #[cfg(feature = "notifications")]
+                        if args.notify {
+                            if let Some(ref contract_name) = args.contract_name {
+                                if let Err(e) = notifications::send_verification_notification(
+                                    contract_name,
+                                    *status.status(),
+                                    &job_id,
+                                ) {
+                                    eprintln!("Warning: Failed to send desktop notification: {e}");
+                                }
                             }
                         }
                     }

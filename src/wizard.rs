@@ -111,6 +111,8 @@ pub fn run_wizard(project: Project) -> Result<VerifyArgs, CliError> {
         notify: false,
         verbose,
         wizard: true, // Mark as wizard mode
+        fail_fast: false,
+        batch_delay: None,
     })
 }
 
