@@ -1,0 +1,30 @@
+[book]
+title = "Voyager Verifier Documentation"
+authors = ["Nethermind"]
+description = "Official documentation for voyager-verifier - Contract class verification tool for Starknet"
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "../book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/NethermindEth/voyager-verifier"
+edit-url-template = "https://github.com/NethermindEth/voyager-verifier/edit/main/docs/src/{path}"
+site-url = "/voyager-verifier/"
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-boolean-and = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.print]
+enable = true
