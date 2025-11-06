@@ -75,8 +75,17 @@ pub mod config;
 /// Verification history tracking and local database management
 pub mod history;
 
+/// History command handlers for viewing and managing verification history
+pub mod history_commands;
+
 /// Desktop notification support for verification completion
 pub mod notifications;
 
+/// Status command handler for checking verification job status
+pub mod status_commands;
+
 /// Enhanced status output formatting with progress bars and JSON support
 pub mod status_output;
+
+/// Verification command handlers for both single and batch verification
+pub mod verify_commands;
