@@ -147,24 +147,22 @@ impl ApiClient {
         files: &[FileInfo],
     ) -> Result<String, ApiClientError> {
         // Prepare license value
-        let license_value = if let Some(lic) = license {
-            if lic == "MIT" {
-                "MIT".to_string()
-            } else {
-                lic
-            }
-        } else {
-            "NONE".to_string()
-        };
+        let license_value = license.map_or_else(
+            || "NONE".to_string(),
+            |lic| if lic == "MIT" { "MIT".to_string() } else { lic },
+        );
 
         // Add Dojo version if available
-        let dojo_version = if let Some(ref dojo_version) = project_metadata.dojo_version {
-            info!("📤 Adding dojo_version to API request: {dojo_version}");
-            Some(dojo_version.clone())
-        } else {
-            debug!("📤 No dojo_version to include in API request");
-            None
-        };
+        let dojo_version = project_metadata.dojo_version.as_ref().map_or_else(
+            || {
+                debug!("📤 No dojo_version to include in API request");
+                None
+            },
+            |dojo_version| {
+                info!("📤 Adding dojo_version to API request: {dojo_version}");
+                Some(dojo_version.clone())
+            },
+        );
 
         info!(
             "🌐 API request payload prepared - build_tool: '{}', dojo_version: {:?}",
@@ -402,10 +400,7 @@ impl ApiClient {
     ///
     /// Will return `Err` on network error or if the verification has failed.
     pub fn get_verification_job(&self, job_id: &str) -> Result<VerificationJob, ApiClientError> {
-        match self.get_job_status(job_id)? {
-            Some(job) => Ok(job),
-            None => Err(ApiClientError::InProgress),
-        }
+        (self.get_job_status(job_id)?).map_or_else(|| Err(ApiClientError::InProgress), Ok)
     }
 }
 

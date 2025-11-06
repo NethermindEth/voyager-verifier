@@ -735,11 +735,10 @@ pub fn gather_packages_and_validate(
     gather_packages(metadata, &mut packages)?;
 
     // Filter packages based on --package argument
-    let filtered_packages: Vec<&PackageMetadata> = if let Some(package_id) = &args.package {
-        packages.iter().filter(|p| p.name == *package_id).collect()
-    } else {
-        packages.iter().collect()
-    };
+    let filtered_packages: Vec<&PackageMetadata> = args.package.as_ref().map_or_else(
+        || packages.iter().collect(),
+        |package_id| packages.iter().filter(|p| p.name == *package_id).collect(),
+    );
 
     // Validate package selection
     if filtered_packages.is_empty() {

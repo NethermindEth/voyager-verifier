@@ -33,10 +33,9 @@ static CLASS_HASH_REGEX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^0x[a-fA-F0-9]+$"));
 
 fn get_class_hash_regex() -> Result<&'static Regex, ClassHashError> {
-    match CLASS_HASH_REGEX.as_ref() {
-        Ok(regex) => Ok(regex),
-        Err(_) => Err(ClassHashError::RegexError),
-    }
+    CLASS_HASH_REGEX
+        .as_ref()
+        .map_or(Err(ClassHashError::RegexError), Ok)
 }
 
 /// A type-safe wrapper for Starknet class hashes.

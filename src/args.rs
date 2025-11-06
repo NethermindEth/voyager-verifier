@@ -12,10 +12,9 @@ static VALID_NAME_REGEX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$"));
 
 fn get_name_validation_regex() -> Result<&'static Regex, String> {
-    match VALID_NAME_REGEX.as_ref() {
-        Ok(regex) => Ok(regex),
-        Err(_) => Err("Internal regex compilation error".to_string()),
-    }
+    VALID_NAME_REGEX
+        .as_ref()
+        .map_or_else(|_| Err("Internal regex compilation error".to_string()), Ok)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

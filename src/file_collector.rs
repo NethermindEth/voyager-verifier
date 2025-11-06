@@ -56,11 +56,10 @@ pub fn prepare_project_for_verification(
     let files = build_file_map(sources, &prefix, metadata, args)?;
 
     // Filter packages and get the target package
-    let filtered_packages: Vec<&PackageMetadata> = if let Some(package_id) = &args.package {
-        packages.iter().filter(|p| p.name == *package_id).collect()
-    } else {
-        packages.iter().collect()
-    };
+    let filtered_packages: Vec<&PackageMetadata> = args.package.as_ref().map_or_else(
+        || packages.iter().collect(),
+        |package_id| packages.iter().filter(|p| p.name == *package_id).collect(),
+    );
 
     let package_meta = filtered_packages
         .first()
@@ -557,11 +556,9 @@ fn extract_module_name(line: &str) -> Option<String> {
     let trimmed = line.trim();
 
     // Remove "pub " prefix if present
-    let without_pub = if let Some(rest) = trimmed.strip_prefix("pub ") {
-        rest.trim()
-    } else {
-        trimmed
-    };
+    let without_pub = trimmed
+        .strip_prefix("pub ")
+        .map_or(trimmed, |rest| rest.trim());
 
     // Check for "mod " prefix
     if let Some(rest) = without_pub.strip_prefix("mod ") {

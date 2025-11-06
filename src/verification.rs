@@ -337,25 +337,26 @@ pub fn execute_verification(
         .map_err(CliError::from)?;
 
     // Determine network from args
-    let network = if let Some(ref net) = args.network {
-        match net {
+    let network = args.network.as_ref().map_or_else(
+        || {
+            // Extract from URL if network not specified
+            let url = args.network_url.url.as_str();
+            if url.contains("sepolia") {
+                "sepolia"
+            } else if url.contains("dev") {
+                "dev"
+            } else if url.contains("mainnet") || url.contains("api.voyager.online") {
+                "mainnet"
+            } else {
+                "custom"
+            }
+        },
+        |net| match net {
             crate::args::NetworkKind::Mainnet => "mainnet",
             crate::args::NetworkKind::Sepolia => "sepolia",
             crate::args::NetworkKind::Dev => "dev",
-        }
-    } else {
-        // Extract from URL if network not specified
-        let url = args.network_url.url.as_str();
-        if url.contains("sepolia") {
-            "sepolia"
-        } else if url.contains("dev") {
-            "dev"
-        } else if url.contains("mainnet") || url.contains("api.voyager.online") {
-            "mainnet"
-        } else {
-            "custom"
-        }
-    };
+        },
+    );
 
     // Save verification record to history database
     if let Err(e) = save_to_history(&HistoryParams {
