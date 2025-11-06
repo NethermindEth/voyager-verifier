@@ -35,66 +35,82 @@ pub struct VerificationJob {
 }
 
 impl VerificationJob {
+    #[must_use]
     pub const fn status(&self) -> &VerifyJobStatus {
         &self.status
     }
 
+    #[must_use]
     pub fn class_hash(&self) -> &str {
         self.class_hash.as_deref().unwrap_or("unknown")
     }
 
+    #[must_use]
     pub fn job_id(&self) -> &str {
         &self.job_id
     }
 
+    #[must_use]
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
+    #[must_use]
     pub fn contract_file(&self) -> Option<&str> {
         self.contract_file.as_deref()
     }
 
+    #[must_use]
     pub fn status_description(&self) -> Option<&str> {
         self.status_description.as_deref()
     }
 
+    #[must_use]
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
     }
 
+    #[must_use]
     pub fn error_category(&self) -> Option<&str> {
         self.error_category.as_deref()
     }
 
+    #[must_use]
     pub const fn created_timestamp(&self) -> Option<f64> {
         self.created_timestamp
     }
 
+    #[must_use]
     pub const fn updated_timestamp(&self) -> Option<f64> {
         self.updated_timestamp
     }
 
+    #[must_use]
     pub fn address(&self) -> Option<&str> {
         self.address.as_deref()
     }
 
+    #[must_use]
     pub fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
 
+    #[must_use]
     pub fn license(&self) -> Option<&str> {
         self.license.as_deref()
     }
 
+    #[must_use]
     pub fn dojo_version(&self) -> Option<&str> {
         self.dojo_version.as_deref()
     }
 
+    #[must_use]
     pub fn build_tool(&self) -> Option<&str> {
         self.build_tool.as_deref()
     }
 
+    #[must_use]
     pub const fn is_completed(&self) -> bool {
         matches!(
             self.status,
@@ -102,6 +118,7 @@ impl VerificationJob {
         )
     }
 
+    #[must_use]
     pub const fn has_failed(&self) -> bool {
         matches!(
             self.status,
@@ -128,6 +145,7 @@ pub struct ProjectMetadataInfo {
 }
 
 impl ProjectMetadataInfo {
+    #[must_use]
     pub fn new(
         cairo_version: semver::Version,
         scarb_version: semver::Version,

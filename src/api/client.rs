@@ -55,7 +55,7 @@ impl ApiClient {
         let mut url = self.base.clone();
         let url_clone = url.clone();
         url.path_segments_mut()
-            .map_err(|_| ApiClientError::CannotBeBase(url_clone))?
+            .map_err(|()| ApiClientError::CannotBeBase(url_clone))?
             .extend(&["classes", class_hash.as_ref()]);
         Ok(url)
     }
@@ -90,7 +90,7 @@ impl ApiClient {
         let mut url = self.base.clone();
         let url_clone = url.clone();
         url.path_segments_mut()
-            .map_err(|_| ApiClientError::CannotBeBase(url_clone))?
+            .map_err(|()| ApiClientError::CannotBeBase(url_clone))?
             .extend(&["class-verify", class_hash.as_ref()]);
         Ok(url)
     }
@@ -216,7 +216,7 @@ impl ApiClient {
         debug!("🏗️  Request Method: POST");
         debug!("📦 Content-Type: application/json");
         if let Ok(json_str) = serde_json::to_string_pretty(&request_body) {
-            debug!("📋 Request Body: {}", json_str);
+            debug!("📋 Request Body: {json_str}");
         }
         debug!("📊 Total files: {}", files.len());
         debug!("🚀 === END API REQUEST PAYLOAD ===");
@@ -265,7 +265,7 @@ impl ApiClient {
         let mut url = self.base.clone();
         let url_clone = url.clone();
         url.path_segments_mut()
-            .map_err(|_| ApiClientError::CannotBeBase(url_clone))?
+            .map_err(|()| ApiClientError::CannotBeBase(url_clone))?
             .extend(&["class-verify", "job", job_id.as_ref()]);
         Ok(url)
     }
@@ -442,6 +442,10 @@ pub fn poll_verification_status(
 /// * `api` - The API client
 /// * `job_id` - The verification job ID
 /// * `callback` - Optional callback function that receives the current `VerificationJob` status
+///
+/// # Errors
+///
+/// Returns an error if the API request fails or the job is not found
 pub fn poll_verification_status_with_callback(
     api: &ApiClient,
     job_id: &str,
