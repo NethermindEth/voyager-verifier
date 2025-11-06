@@ -54,6 +54,7 @@ pub enum ConfigError {
 }
 
 impl ConfigError {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::Io(_) => "E030",
@@ -148,6 +149,10 @@ pub struct WorkspaceConfig {
 
 impl Config {
     /// Load configuration from a file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed as valid TOML
     pub fn from_file(path: &Utf8PathBuf) -> Result<Self, ConfigError> {
         let content = fs::read_to_string(path)?;
         let config: Self = toml::from_str(&content)?;
@@ -157,6 +162,10 @@ impl Config {
     /// Find and load configuration file by searching current and parent directories
     ///
     /// Returns None if no config file is found (which is not an error)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a config file is found but cannot be read or parsed
     pub fn find_and_load() -> Result<Option<Self>, ConfigError> {
         if let Some(config_path) = Self::find_config_file()? {
             Ok(Some(Self::from_file(&config_path)?))
@@ -184,6 +193,7 @@ impl Config {
     }
 
     /// Convert network string to `NetworkKind` enum
+    #[must_use]
     pub fn parse_network(&self) -> Option<NetworkKind> {
         self.voyager
             .network
@@ -194,6 +204,32 @@ impl Config {
                 "dev" => Some(NetworkKind::Dev),
                 _ => None,
             })
+    }
+}
+
+/// Resolves the API URL from CLI args and config
+///
+/// # Errors
+///
+/// Returns an error if the URL cannot be parsed
+pub fn resolve_api_url(
+    network_url: crate::args::Network,
+    config: Option<&Config>,
+) -> anyhow::Result<reqwest::Url> {
+    if network_url.url.as_str() == "https://placeholder.invalid/" {
+        if let Some(cfg) = config {
+            if let Some(ref url_str) = cfg.voyager.url {
+                Ok(reqwest::Url::parse(url_str)?)
+            } else {
+                eprintln!("Error: API URL is required. Provide --network, --url, or set 'network' or 'url' in .voyager.toml");
+                std::process::exit(1);
+            }
+        } else {
+            eprintln!("Error: API URL is required. Provide --network, --url, or set 'network' or 'url' in .voyager.toml");
+            std::process::exit(1);
+        }
+    } else {
+        Ok(network_url.url)
     }
 }
 
@@ -252,10 +288,10 @@ mod tests {
 
     #[test]
     fn test_parse_empty_config() -> Result<(), Box<dyn std::error::Error>> {
-        let toml = r#"
+        let toml = r"
             [voyager]
             [workspace]
-        "#;
+        ";
 
         let config: Config = toml::from_str(toml)?;
         assert_eq!(config.voyager.network, None);
