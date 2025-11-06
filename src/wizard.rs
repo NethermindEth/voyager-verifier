@@ -15,6 +15,7 @@ use scarb_metadata::PackageMetadata;
 use spdx::LicenseId;
 
 /// Summary of verification parameters for display
+#[allow(clippy::struct_excessive_bools)]
 struct VerificationSummary<'a> {
     network: &'a Option<NetworkKind>,
     network_url: &'a Network,
@@ -288,7 +289,7 @@ fn prompt_license(project: &Project) -> Result<Option<LicenseId>, CliError> {
         {
             continue;
         }
-        options.push(lic.to_string());
+        options.push((*lic).to_string());
     }
 
     options.push("None (no license)".to_string());
@@ -319,7 +320,7 @@ fn prompt_license(project: &Project) -> Result<Option<LicenseId>, CliError> {
         Ok(Some(license_value_parser(&custom).map_err(|e| {
             CliError::InteractivePromptFailed(dialoguer::Error::IO(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid license identifier: {}", e),
+                format!("Invalid license identifier: {e}"),
             )))
         })?))
     } else if selection == 0 && detected_license.is_some() {
@@ -331,7 +332,7 @@ fn prompt_license(project: &Project) -> Result<Option<LicenseId>, CliError> {
         Ok(Some(license_value_parser(selected_name).map_err(|e| {
             CliError::InteractivePromptFailed(dialoguer::Error::IO(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid license identifier: {}", e),
+                format!("Invalid license identifier: {e}"),
             )))
         })?))
     }
@@ -393,11 +394,11 @@ fn show_summary(summary: &VerificationSummary) {
     } else {
         hash_str
     };
-    println!("   Class Hash:   {}", hash_display);
+    println!("   Class Hash:   {hash_display}");
 
     // Package (if specified)
     if let Some(pkg) = summary.package {
-        println!("   Package:      {}", pkg);
+        println!("   Package:      {pkg}");
     }
 
     // Contract name

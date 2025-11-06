@@ -9,11 +9,21 @@ use crate::api::{VerificationJob, VerifyJobStatus};
 use crate::args::OutputFormat;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Format timestamp as human-readable string
+#[must_use]
 pub fn format_timestamp(timestamp: f64) -> String {
-    let datetime = DateTime::from_timestamp(timestamp as i64, 0)
+    // Safely convert f64 to i64, clamping to valid i64 range
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    let timestamp_secs = if timestamp.is_finite() {
+        timestamp.clamp(i64::MIN as f64, i64::MAX as f64) as i64
+    } else {
+        0
+    };
+
+    let datetime = DateTime::from_timestamp(timestamp_secs, 0)
         .unwrap_or_else(|| DateTime::<Utc>::from(UNIX_EPOCH));
     datetime.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
@@ -22,18 +32,54 @@ pub fn format_timestamp(timestamp: f64) -> String {
 fn calculate_elapsed(created: Option<f64>, _updated: Option<f64>) -> Option<u64> {
     let start = created?;
     // Always use current time for live updates
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|d| d.as_secs() as f64)?;
-    Some((now - start) as u64)
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
+
+    // Convert start from f64 to u64, clamping to valid range
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    let start_secs = if start >= 0.0 && start.is_finite() {
+        start.clamp(0.0, u64::MAX as f64) as u64
+    } else {
+        0
+    };
+
+    // Calculate elapsed, handling the case where start > now
+    Some(now.saturating_sub(start_secs))
 }
 
 /// Calculate elapsed time in seconds between two timestamps (for completed jobs)
 fn calculate_elapsed_between(created: Option<f64>, updated: Option<f64>) -> Option<u64> {
     let start = created?;
     let end = updated?;
-    Some((end - start) as u64)
+
+    // Safely convert f64 timestamps to u64, handling negative values and truncation
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    let start_secs = if start >= 0.0 && start.is_finite() {
+        start.clamp(0.0, u64::MAX as f64) as u64
+    } else {
+        0
+    };
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    let end_secs = if end >= 0.0 && end.is_finite() {
+        end.clamp(0.0, u64::MAX as f64) as u64
+    } else {
+        0
+    };
+
+    // Calculate elapsed, handling the case where end < start
+    Some(end_secs.saturating_sub(start_secs))
 }
 
 /// Format duration in seconds to human-readable string
@@ -76,7 +122,7 @@ fn get_average_from_history() -> Option<u64> {
 ///    - Compilation: 15-30 seconds (`InProgress` → Compiled)
 ///    - Verification: 2-5 seconds (Compiled → Success/Fail)
 ///    - Total: ~40 seconds
-fn estimate_remaining_time(status: &VerifyJobStatus, elapsed: u64) -> Option<u64> {
+fn estimate_remaining_time(status: VerifyJobStatus, elapsed: u64) -> Option<u64> {
     // Try to get history-based estimate first
     if let Some(avg_total) = get_average_from_history() {
         // Use historical average, adjusted by current stage
@@ -116,7 +162,7 @@ fn estimate_remaining_time(status: &VerifyJobStatus, elapsed: u64) -> Option<u64
 
 /// Get progress percentage based on status
 /// Based on actual verification flow: Submitted → `InProgress` → Compiling → Compiled → Verifying → Success
-const fn get_progress_percentage(status: &VerifyJobStatus) -> u8 {
+const fn get_progress_percentage(status: VerifyJobStatus) -> u8 {
     match status {
         VerifyJobStatus::Submitted => 10,  // Job created, waiting in queue
         VerifyJobStatus::Processing => 40, // Picked up by worker, compiling
@@ -139,7 +185,11 @@ fn progress_bar(percentage: u8) -> String {
 }
 
 /// Format verification job as enhanced text
-pub fn format_text(job: &VerificationJob) -> String {
+///
+/// # Errors
+///
+/// Returns `std::fmt::Error` if writing to the output string fails (should never happen in practice).
+pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
     // Header with status emoji
@@ -149,35 +199,35 @@ pub fn format_text(job: &VerificationJob) -> String {
         _ => "⏳",
     };
 
-    output.push_str(&format!("{} Verification Status\n\n", status_emoji));
+    write!(output, "{status_emoji} Verification Status\n\n")?;
 
     // Job details
-    output.push_str(&format!("Job ID: {}\n", job.job_id()));
-    output.push_str(&format!("Status: {}\n", job.status()));
+    writeln!(output, "Job ID: {}", job.job_id())?;
+    writeln!(output, "Status: {}", job.status())?;
 
     // Progress bar for in-progress jobs
     if !job.is_completed() {
-        let percentage = get_progress_percentage(job.status());
-        output.push_str(&format!("Progress: {}\n", progress_bar(percentage)));
+        let percentage = get_progress_percentage(*job.status());
+        writeln!(output, "Progress: {}", progress_bar(percentage))?;
     }
 
     // Network and contract details
     if let Some(network) = job.class_hash.as_ref() {
-        output.push_str(&format!("Class Hash: {}\n", network));
+        writeln!(output, "Class Hash: {network}")?;
     }
     if let Some(name) = job.name() {
-        output.push_str(&format!("Contract: {}\n", name));
+        writeln!(output, "Contract: {name}")?;
     }
     if let Some(file) = job.contract_file() {
-        output.push_str(&format!("Contract File: {}\n", file));
+        writeln!(output, "Contract File: {file}")?;
     }
 
     // Time information
     if let Some(created) = job.created_timestamp() {
-        output.push_str(&format!("Started: {}\n", format_timestamp(created)));
+        writeln!(output, "Started: {}", format_timestamp(created))?;
     }
     if let Some(updated) = job.updated_timestamp() {
-        output.push_str(&format!("Last Updated: {}\n", format_timestamp(updated)));
+        writeln!(output, "Last Updated: {}", format_timestamp(updated))?;
     }
 
     // Elapsed and estimated time
@@ -190,46 +240,48 @@ pub fn format_text(job: &VerificationJob) -> String {
     };
 
     if let Some(elapsed_secs) = elapsed {
-        output.push_str(&format!("Elapsed: {}\n", format_duration(elapsed_secs)));
+        writeln!(output, "Elapsed: {}", format_duration(elapsed_secs))?;
 
-        if let Some(remaining) = estimate_remaining_time(job.status(), elapsed_secs) {
+        if let Some(remaining) = estimate_remaining_time(*job.status(), elapsed_secs) {
             if remaining > 0 {
-                output.push_str(&format!(
-                    "Estimated Remaining: ~{}\n",
+                writeln!(
+                    output,
+                    "Estimated Remaining: ~{}",
                     format_duration(remaining)
-                ));
+                )?;
             }
         }
     }
 
     // Version information
     if let Some(version) = job.version() {
-        output.push_str(&format!("Cairo Version: {}\n", version));
+        writeln!(output, "Cairo Version: {version}")?;
     }
     if let Some(dojo_version) = job.dojo_version() {
-        output.push_str(&format!("Dojo Version: {}\n", dojo_version));
+        writeln!(output, "Dojo Version: {dojo_version}")?;
     }
     if let Some(license) = job.license() {
-        output.push_str(&format!("License: {}\n", license));
+        writeln!(output, "License: {license}")?;
     }
 
     // Status-specific messages
     match job.status() {
         VerifyJobStatus::Success => {
-            output.push_str(&format!(
+            write!(
+                output,
                 "\n✅ Verification successful!\n\
                 The contract is now verified and visible on Voyager at:\n\
                 https://voyager.online/class/{}\n",
                 job.class_hash()
-            ));
+            )?;
         }
         VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => {
             output.push_str("\n❌ Verification failed!\n");
             if let Some(desc) = job.status_description() {
-                output.push_str(&format!("Reason: {}\n", desc));
+                writeln!(output, "Reason: {desc}")?;
             }
             if let Some(msg) = job.message() {
-                output.push_str(&format!("Message: {}\n", msg));
+                writeln!(output, "Message: {msg}")?;
             }
         }
         _ => {
@@ -238,7 +290,7 @@ pub fn format_text(job: &VerificationJob) -> String {
         }
     }
 
-    output
+    Ok(output)
 }
 
 /// JSON output structure for programmatic parsing
@@ -274,7 +326,7 @@ pub fn format_json(job: &VerificationJob) -> String {
     } else {
         calculate_elapsed(job.created_timestamp(), job.updated_timestamp())
     };
-    let estimated_remaining = elapsed.and_then(|e| estimate_remaining_time(job.status(), e));
+    let estimated_remaining = elapsed.and_then(|e| estimate_remaining_time(*job.status(), e));
 
     let output = JsonOutput {
         job_id: job.job_id().to_string(),
@@ -282,7 +334,7 @@ pub fn format_json(job: &VerificationJob) -> String {
         status_code: *job.status() as u8,
         is_completed: job.is_completed(),
         has_failed: job.has_failed(),
-        progress_percentage: get_progress_percentage(job.status()),
+        progress_percentage: get_progress_percentage(*job.status()),
         class_hash: job.class_hash.clone(),
         contract_name: job.name().map(String::from),
         contract_file: job.contract_file().map(String::from),
@@ -309,7 +361,11 @@ pub fn format_json(job: &VerificationJob) -> String {
 }
 
 /// Format verification job as table (primarily for batch operations)
-pub fn format_table(job: &VerificationJob) -> String {
+///
+/// # Errors
+///
+/// Returns `std::fmt::Error` if writing to the output string fails (should never happen in practice).
+pub fn format_table(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
     // Table header
@@ -324,16 +380,16 @@ pub fn format_table(job: &VerificationJob) -> String {
     );
 
     // Job details in table format
-    let add_row = |output: &mut String, key: &str, value: &str| {
-        output.push_str(&format!("│ {:<23} │ {:<49} │\n", key, value));
+    let add_row = |output: &mut String, key: &str, value: &str| -> Result<(), std::fmt::Error> {
+        writeln!(output, "│ {key:<23} │ {value:<49} │")
     };
 
-    add_row(&mut output, "Job ID", job.job_id());
-    add_row(&mut output, "Status", &job.status().to_string());
+    add_row(&mut output, "Job ID", job.job_id())?;
+    add_row(&mut output, "Status", &job.status().to_string())?;
 
     if !job.is_completed() {
-        let percentage = get_progress_percentage(job.status());
-        add_row(&mut output, "Progress", &format!("{}%", percentage));
+        let percentage = get_progress_percentage(*job.status());
+        add_row(&mut output, "Progress", &format!("{percentage}%"))?;
     }
 
     if let Some(hash) = job.class_hash.as_ref() {
@@ -342,15 +398,15 @@ pub fn format_table(job: &VerificationJob) -> String {
         } else {
             hash.clone()
         };
-        add_row(&mut output, "Class Hash", &truncated);
+        add_row(&mut output, "Class Hash", &truncated)?;
     }
 
     if let Some(name) = job.name() {
-        add_row(&mut output, "Contract", name);
+        add_row(&mut output, "Contract", name)?;
     }
 
     if let Some(created) = job.created_timestamp() {
-        add_row(&mut output, "Started", &format_timestamp(created));
+        add_row(&mut output, "Started", &format_timestamp(created))?;
     }
 
     let elapsed = if job.is_completed() {
@@ -359,11 +415,11 @@ pub fn format_table(job: &VerificationJob) -> String {
         calculate_elapsed(job.created_timestamp(), job.updated_timestamp())
     };
     if let Some(elapsed_secs) = elapsed {
-        add_row(&mut output, "Elapsed", &format_duration(elapsed_secs));
+        add_row(&mut output, "Elapsed", &format_duration(elapsed_secs))?;
     }
 
     if let Some(version) = job.version() {
-        add_row(&mut output, "Cairo Version", version);
+        add_row(&mut output, "Cairo Version", version)?;
     }
 
     // Table footer
@@ -371,10 +427,11 @@ pub fn format_table(job: &VerificationJob) -> String {
         "└─────────────────────────┴───────────────────────────────────────────────────┘\n",
     );
 
-    output
+    Ok(output)
 }
 
 /// Format a single-line inline status for live updates with progress bar
+#[must_use]
 pub fn format_inline_status(job: &VerificationJob) -> String {
     let stage = match job.status() {
         VerifyJobStatus::Submitted => "Submitted (waiting in queue)",
@@ -392,30 +449,37 @@ pub fn format_inline_status(job: &VerificationJob) -> String {
         let elapsed_str = format_duration(elapsed_secs);
 
         // Show progress bar for in-progress jobs
-        if let Some(remaining_secs) = estimate_remaining_time(job.status(), elapsed_secs) {
+        if let Some(remaining_secs) = estimate_remaining_time(*job.status(), elapsed_secs) {
             let total = elapsed_secs + remaining_secs;
-            let percentage = if total > 0 {
-                ((elapsed_secs as f64 / total as f64) * 100.0) as u8
+            let percentage: u8 = if total > 0 {
+                #[allow(clippy::cast_possible_truncation)]
+                let pct = (u128::from(elapsed_secs) * 100 / u128::from(total)).min(100) as u8;
+                pct
             } else {
                 0
             };
 
             let bar = progress_bar(percentage);
-            return format!("⏳ {} {} [{}]", stage, bar, elapsed_str);
+            return format!("⏳ {stage} {bar} [{elapsed_str}]");
         }
 
-        format!("⏳ {} [{}]", stage, elapsed_str)
+        format!("⏳ {stage} [{elapsed_str}]")
     } else {
-        format!("⏳ {}", stage)
+        format!("⏳ {stage}")
     }
 }
 
 /// Main formatting function that delegates to specific formatters
+#[must_use]
 pub fn format_status(job: &VerificationJob, format: &OutputFormat) -> String {
     match format {
-        OutputFormat::Text => format_text(job),
+        OutputFormat::Text => {
+            format_text(job).unwrap_or_else(|_| "Error formatting text".to_string())
+        }
         OutputFormat::Json => format_json(job),
-        OutputFormat::Table => format_table(job),
+        OutputFormat::Table => {
+            format_table(job).unwrap_or_else(|_| "Error formatting table".to_string())
+        }
     }
 }
 
@@ -432,10 +496,10 @@ mod tests {
 
     #[test]
     fn test_progress_percentage() {
-        assert_eq!(get_progress_percentage(&VerifyJobStatus::Submitted), 10);
-        assert_eq!(get_progress_percentage(&VerifyJobStatus::Processing), 40);
-        assert_eq!(get_progress_percentage(&VerifyJobStatus::Compiled), 85);
-        assert_eq!(get_progress_percentage(&VerifyJobStatus::Success), 100);
+        assert_eq!(get_progress_percentage(VerifyJobStatus::Submitted), 10);
+        assert_eq!(get_progress_percentage(VerifyJobStatus::Processing), 40);
+        assert_eq!(get_progress_percentage(VerifyJobStatus::Compiled), 85);
+        assert_eq!(get_progress_percentage(VerifyJobStatus::Success), 100);
     }
 
     #[test]
@@ -448,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_format_timestamp() {
-        let ts = 1704067200.0; // 2024-01-01 00:00:00 UTC
+        let ts = 1_704_067_200.0; // 2024-01-01 00:00:00 UTC
         let formatted = format_timestamp(ts);
         assert!(formatted.contains("2024-01-01"));
     }

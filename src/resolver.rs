@@ -35,6 +35,7 @@ pub enum Error {
 }
 
 impl Error {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::DependencyPath { .. } => "E012",
@@ -143,10 +144,9 @@ pub fn package_sources_with_test_files(
         if validate_cargo_toml_for_proc_macro(&cargo_toml_path)? {
             debug!("Cargo.toml validation passed for procedural macro package");
             return collect_procedural_macro_rust_files(package_metadata, include_test_files);
-        } else {
-            debug!("Cargo.toml validation failed - treating as regular Cairo package");
-            // Fall through to regular Cairo file collection
         }
+        debug!("Cargo.toml validation failed - treating as regular Cairo package");
+        // Fall through to regular Cairo file collection
     }
 
     let mut sources: Vec<Utf8PathBuf> = WalkDir::new(package_metadata.root.clone())
@@ -329,15 +329,13 @@ fn validate_cargo_toml_for_proc_macro(cargo_toml_path: &Utf8Path) -> Result<bool
         .lib
         .as_ref()
         .and_then(|lib| lib.crate_type.as_ref())
-        .map(|types| types.contains(&"cdylib".to_string()))
-        .unwrap_or(false);
+        .is_some_and(|types| types.contains(&"cdylib".to_string()));
 
     // Check for cairo-lang-macro dependency
     let has_cairo_macro_dep = cargo_toml
         .dependencies
         .as_ref()
-        .map(|deps| deps.contains_key("cairo-lang-macro"))
-        .unwrap_or(false);
+        .is_some_and(|deps| deps.contains_key("cairo-lang-macro"));
 
     let is_valid = has_cdylib && has_cairo_macro_dep;
     debug!(
@@ -621,7 +619,10 @@ fn collect_macro_implementation_files(
         })?;
 
         if let Some(path_str) = entry.path().to_str() {
-            if path_str.ends_with(".rs") {
+            if std::path::Path::new(path_str)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"))
+            {
                 let rust_file_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
 
                 // Skip files we've already processed
@@ -1002,7 +1003,7 @@ cairo-lang-macro = "0.1.0"
 
     #[test]
     fn test_module_declaration_parsing() {
-        let rust_code = r#"
+        let rust_code = r"
 // This is a comment
 pub mod utils;
 mod macros;
@@ -1013,7 +1014,7 @@ mod inline_module {
 
 // More comments
 use std::collections::HashMap;
-"#;
+";
 
         let modules = parse_module_declarations(rust_code);
         assert_eq!(modules.len(), 4);
@@ -1061,7 +1062,7 @@ use std::collections::HashMap;
         let temp_path = Utf8PathBuf::try_from(temp_dir.path().to_path_buf()).unwrap();
 
         // Create Rust file with procedural macro attributes
-        let rust_with_macro = r#"
+        let rust_with_macro = r"
 use cairo_lang_macro::TokenStream;
 
 #[inline_macro]
@@ -1073,7 +1074,7 @@ pub fn my_inline_macro(_input: TokenStream) -> TokenStream {
 pub fn my_attribute(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // implementation
 }
-"#;
+";
         let macro_file_path = temp_path.join("macro_impl.rs");
         std::fs::write(&macro_file_path, rust_with_macro).unwrap();
 
@@ -1081,7 +1082,7 @@ pub fn my_attribute(_attr: TokenStream, item: TokenStream) -> TokenStream {
         assert!(has_macros);
 
         // Create Rust file without procedural macro attributes
-        let rust_without_macro = r#"
+        let rust_without_macro = r"
 pub fn regular_function() -> i32 {
     42
 }
@@ -1090,7 +1091,7 @@ pub fn regular_function() -> i32 {
 struct MyStruct {
     field: String,
 }
-"#;
+";
         let normal_file_path = temp_path.join("normal.rs");
         std::fs::write(&normal_file_path, rust_without_macro).unwrap();
 

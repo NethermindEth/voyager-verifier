@@ -16,6 +16,7 @@ pub enum LicenseInfo {
 
 impl LicenseInfo {
     /// Get the display string for the license
+    #[must_use]
     pub fn display_string(&self) -> &str {
         match self {
             Self::Cli(id) => match id.name {
@@ -32,12 +33,14 @@ impl LicenseInfo {
     }
 
     /// Check if license is specified
+    #[must_use]
     pub const fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 }
 
 /// Extract license information from various sources
+#[must_use]
 pub fn resolve_license_info(
     cli_license: Option<LicenseId>,
     path_license: Option<LicenseId>,
