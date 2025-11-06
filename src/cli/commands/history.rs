@@ -1,10 +1,12 @@
 use crate::{
     api::ApiClient,
-    args::{HistoryArgs, HistoryCommands, Network, NetworkKind},
-    config::Config,
-    errors::CliError,
-    history::{HistoryDb, VerificationRecord},
-    verification::display_verbose_error,
+    cli::{
+        args::{HistoryArgs, HistoryCommands, Network, NetworkKind},
+        config::Config,
+    },
+    core::verification::display_verbose_error,
+    storage::history::{HistoryDb, VerificationRecord},
+    utils::errors::CliError,
 };
 use anyhow::Result;
 
@@ -122,7 +124,7 @@ fn handle_history_status(
                 network
             };
 
-            let url = crate::config::resolve_api_url(network_url, config)?;
+            let url = super::super::config::resolve_api_url(network_url, config)?;
             let api_client = ApiClient::new(url)?;
             let status = crate::api::poll_verification_status(&api_client, job).map_err(|e| {
                 let cli_error = CliError::from(e);
@@ -206,7 +208,7 @@ fn handle_history_recheck(
         network
     };
 
-    let url = crate::config::resolve_api_url(network_url, config)?;
+    let url = super::super::config::resolve_api_url(network_url, config)?;
     let api_client = ApiClient::new(url)?;
 
     let mut updated = 0;

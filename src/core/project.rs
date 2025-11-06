@@ -71,8 +71,8 @@ impl std::fmt::Display for ProjectType {
     }
 }
 
-use crate::args::{Project, VerifyArgs};
-use crate::errors::CliError;
+use crate::cli::args::{Project, VerifyArgs};
+use crate::utils::errors::CliError;
 use dialoguer::Select;
 use log::{debug, info, warn};
 use std::fs;

@@ -6,7 +6,7 @@
 //! - Table format for batch operations
 
 use crate::api::{VerificationJob, VerifyJobStatus};
-use crate::args::OutputFormat;
+use crate::cli::args::OutputFormat;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
@@ -102,7 +102,7 @@ fn format_duration(seconds: u64) -> String {
 /// Queries the last 10 successful verifications and returns their average duration.
 /// Returns None if there are fewer than 3 samples.
 fn get_average_from_history() -> Option<u64> {
-    use crate::history::HistoryDb;
+    use crate::storage::history::HistoryDb;
 
     // Try to open history DB and get average
     HistoryDb::open().ok().and_then(|db| {

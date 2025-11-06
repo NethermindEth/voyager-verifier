@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use verifier::api::{VerificationError, VerifyJobStatus};
-use verifier::class_hash::{ClassHash, ClassHashError};
-use verifier::resolver;
-use verifier::voyager::{self, Voyager};
+use verifier::core::class_hash::{ClassHash, ClassHashError};
+use verifier::filesystem::resolver;
+use verifier::utils::voyager::{self, Voyager};
 
 #[test]
 fn test_class_hash_integration() {
@@ -164,7 +164,7 @@ fn test_error_handling_integration() {
 #[test]
 fn test_path_handling_integration() {
     use camino::Utf8PathBuf;
-    use verifier::resolver::biggest_common_prefix;
+    use verifier::filesystem::resolver::biggest_common_prefix;
 
     // Test realistic path scenarios
     let paths = vec![

@@ -1,9 +1,8 @@
 use crate::{
     api::{ApiClient, ApiClientError},
-    args::StatusArgs,
-    config::Config,
-    errors::CliError,
-    verification::{check, display_verbose_error},
+    cli::{args::StatusArgs, config::Config},
+    core::verification::{check, display_verbose_error},
+    utils::errors::CliError,
 };
 use anyhow::Result;
 use log::info;

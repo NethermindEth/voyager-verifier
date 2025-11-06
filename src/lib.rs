@@ -18,7 +18,7 @@
 //! ```rust,no_run
 //! use verifier::{
 //!     api::ApiClient,
-//!     class_hash::ClassHash,
+//!     core::class_hash::ClassHash,
 //! };
 //! use url::Url;
 //!
@@ -39,53 +39,20 @@
 /// API client and types for interacting with verification services
 pub mod api;
 
-/// Command-line argument parsing and project configuration
-pub mod args;
+/// Command-line interface module including arguments, commands, config, and wizard
+pub mod cli;
 
-/// Type-safe class hash handling and validation
-pub mod class_hash;
+/// Core verification logic including verification orchestration, project detection, and class hash handling
+pub mod core;
 
-/// Comprehensive error types with actionable suggestions
-pub mod errors;
+/// File collection and dependency resolution utilities
+pub mod filesystem;
 
-/// License detection and management utilities
-pub mod license;
+/// Output formatting and notification support
+pub mod output;
 
-/// Project dependency resolution and source file collection
-pub mod resolver;
+/// Data persistence and history tracking
+pub mod storage;
 
-/// Voyager block explorer integration utilities
-pub mod voyager;
-
-/// Project type definitions and detection logic
-pub mod project;
-
-/// Verification workflow orchestration
-pub mod verification;
-
-/// File collection, validation, and preparation for verification
-pub mod file_collector;
-
-/// Interactive verification wizard for guided contract verification
-pub mod wizard;
-
-/// Configuration file support for .voyager.toml files
-pub mod config;
-
-/// Verification history tracking and local database management
-pub mod history;
-
-/// History command handlers for viewing and managing verification history
-pub mod history_commands;
-
-/// Desktop notification support for verification completion
-pub mod notifications;
-
-/// Status command handler for checking verification job status
-pub mod status_commands;
-
-/// Enhanced status output formatting with progress bars and JSON support
-pub mod status_output;
-
-/// Verification command handlers for both single and batch verification
-pub mod verify_commands;
+/// General utilities including errors, license, and Voyager integration
+pub mod utils;

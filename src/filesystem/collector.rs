@@ -5,15 +5,13 @@
 //! - Validating file types and sizes
 //! - Adding manifest files (Scarb.toml, workspace manifests)
 //! - Finding contract files
-//! - Converting paths to FileInfo structures
+//! - Converting paths to `FileInfo` structures
 //! - Logging verification information
 
+use super::resolver;
 use crate::api::FileInfo;
-use crate::args::VerifyArgs;
-use crate::errors::CliError;
-use crate::license;
-use crate::resolver;
-use crate::voyager;
+use crate::cli::args::VerifyArgs;
+use crate::utils::{errors::CliError, license, voyager};
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
 use log::{debug, info, warn};

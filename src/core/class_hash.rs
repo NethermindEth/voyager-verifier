@@ -13,7 +13,7 @@
 //! ## Example Usage
 //!
 //! ```rust
-//! use verifier::class_hash::ClassHash;
+//! use verifier::core::class_hash::ClassHash;
 //!
 //! // Valid class hash
 //! let hash = ClassHash::new("0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18")?;
@@ -53,7 +53,7 @@ fn get_class_hash_regex() -> Result<&'static Regex, ClassHashError> {
 /// ## Examples
 ///
 /// ```rust
-/// use verifier::class_hash::ClassHash;
+/// use verifier::core::class_hash::ClassHash;
 ///
 /// // Valid class hash
 /// let hash = ClassHash::new("0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18")?;
@@ -115,7 +115,7 @@ impl ClassHash {
     /// # Examples
     ///
     /// ```rust
-    /// use verifier::class_hash::ClassHash;
+    /// use verifier::core::class_hash::ClassHash;
     ///
     /// // Valid class hash
     /// let hash = ClassHash::new("0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18")?;

@@ -1,5 +1,5 @@
 use super::types::VerifyJobStatus;
-use crate::project::ProjectType;
+use crate::core::project::ProjectType;
 use semver;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

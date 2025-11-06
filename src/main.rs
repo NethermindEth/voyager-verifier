@@ -1,7 +1,7 @@
-use verifier::args::{Args, Commands};
+use verifier::cli::args::{Args, Commands};
 
 use clap::Parser;
-use verifier::{config::Config, history_commands, status_commands, verify_commands};
+use verifier::cli::{commands, config::Config};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -16,13 +16,13 @@ fn main() -> anyhow::Result<()> {
 
     match cmd {
         Commands::Verify(args) => {
-            verify_commands::handle_verify_command(args, config.as_ref())?;
+            commands::verify::handle_verify_command(args, config.as_ref())?;
         }
         Commands::Status(args) => {
-            status_commands::handle_status_command(args, config.as_ref())?;
+            commands::status::handle_status_command(args, config.as_ref())?;
         }
         Commands::History(args) => {
-            history_commands::handle_history_command(args, config.as_ref())?;
+            commands::history::handle_history_command(args, config.as_ref())?;
         }
     }
     Ok(())

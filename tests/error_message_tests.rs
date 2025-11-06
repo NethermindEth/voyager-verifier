@@ -3,9 +3,9 @@
 use reqwest::StatusCode;
 use url::Url;
 use verifier::api::{ApiClientError, VerificationError};
-use verifier::class_hash::{ClassHash, ClassHashError};
-use verifier::errors::{MissingContract, RequestFailure};
-use verifier::resolver;
+use verifier::core::class_hash::{ClassHash, ClassHashError};
+use verifier::filesystem::resolver;
+use verifier::utils::errors::{MissingContract, RequestFailure};
 
 #[test]
 fn test_missing_contract_error_with_suggestions() {

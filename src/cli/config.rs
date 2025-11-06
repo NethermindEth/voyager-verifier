@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use std::{env, fs, io};
 use thiserror::Error;
 
-use crate::args::NetworkKind;
+use super::args::NetworkKind;
 
 /// Configuration file name
 pub const CONFIG_FILE_NAME: &str = ".voyager.toml";
@@ -213,7 +213,7 @@ impl Config {
 ///
 /// Returns an error if the URL cannot be parsed
 pub fn resolve_api_url(
-    network_url: crate::args::Network,
+    network_url: super::args::Network,
     config: Option<&Config>,
 ) -> anyhow::Result<reqwest::Url> {
     if network_url.url.as_str() == "https://placeholder.invalid/" {

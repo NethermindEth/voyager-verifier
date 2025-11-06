@@ -3,12 +3,11 @@
 //! Provides a guided, step-by-step verification flow for users who prefer
 //! interactive prompts over CLI flags.
 
-use crate::args::{
+use super::args::{
     contract_name_value_parser, license_value_parser, Network, NetworkKind, Project, VerifyArgs,
 };
-use crate::class_hash::ClassHash;
-use crate::errors::CliError;
-use crate::project::ProjectType;
+use crate::core::{class_hash::ClassHash, project::ProjectType};
+use crate::utils::errors::CliError;
 use dialoguer::{Confirm, Input, Select};
 use reqwest::Url;
 use scarb_metadata::PackageMetadata;

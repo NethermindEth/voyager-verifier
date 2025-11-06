@@ -703,9 +703,11 @@ fn should_exclude_rust_file(file_path: &Utf8Path) -> bool {
     false
 }
 
-use crate::args::VerifyArgs;
-use crate::errors::{self, CliError};
-use crate::voyager;
+use crate::cli::args::VerifyArgs;
+use crate::utils::{
+    errors::{self, CliError},
+    voyager,
+};
 
 /// Gather and validate packages for verification
 ///

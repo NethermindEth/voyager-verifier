@@ -1,11 +1,12 @@
 use crate::{
     api::{ApiClient, ApiClientError},
-    args::{OutputFormat, VerifyArgs},
-    config::Config,
-    errors::CliError,
-    license,
-    verification::{check, display_verbose_error, display_verification_job_id, submit},
-    wizard,
+    cli::{
+        args::{OutputFormat, VerifyArgs},
+        config::Config,
+        wizard,
+    },
+    core::verification::{check, display_verbose_error, display_verification_job_id, submit},
+    utils::{errors::CliError, license},
 };
 use anyhow::Result;
 use log::info;
@@ -104,7 +105,7 @@ fn handle_batch_verification(args: &VerifyArgs, config: Option<&Config>) -> Resu
     license::warn_if_no_license(&license_info);
 
     // Submit batch
-    let summary = crate::verification::submit_batch(&api_client, args, cfg, &license_info)
+    let summary = crate::core::verification::submit_batch(&api_client, args, cfg, &license_info)
         .inspect_err(|e| {
             if args.verbose {
                 display_verbose_error(e);
@@ -112,12 +113,12 @@ fn handle_batch_verification(args: &VerifyArgs, config: Option<&Config>) -> Resu
         })?;
 
     // Display summary
-    crate::verification::display_batch_summary(&summary);
+    crate::core::verification::display_batch_summary(&summary);
 
     // Watch mode
     if args.watch && summary.submitted > 0 {
         let final_summary =
-            crate::verification::watch_batch(&api_client, &summary, &OutputFormat::Text)
+            crate::core::verification::watch_batch(&api_client, &summary, &OutputFormat::Text)
                 .inspect_err(|e| {
                     if args.verbose {
                         display_verbose_error(e);
@@ -125,7 +126,7 @@ fn handle_batch_verification(args: &VerifyArgs, config: Option<&Config>) -> Resu
                 })?;
 
         println!("\n=== Final Summary ===");
-        crate::verification::display_batch_summary(&final_summary);
+        crate::core::verification::display_batch_summary(&final_summary);
     }
 
     Ok(())
@@ -191,7 +192,7 @@ fn handle_single_verification(args: VerifyArgs) -> Result<()> {
             #[cfg(feature = "notifications")]
             if args.notify {
                 if let Some(ref contract_name) = args.contract_name {
-                    if let Err(e) = crate::notifications::send_verification_notification(
+                    if let Err(e) = crate::output::notifications::send_verification_notification(
                         contract_name,
                         *status.status(),
                         &job_id,

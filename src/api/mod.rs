@@ -16,7 +16,7 @@
 //!
 //! ```rust,no_run
 //! use verifier::api::{ApiClient, FileInfo, ProjectMetadataInfo};
-//! use verifier::class_hash::ClassHash;
+//! use verifier::core::class_hash::ClassHash;
 //! use url::Url;
 //! use std::path::PathBuf;
 //!

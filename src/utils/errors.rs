@@ -5,10 +5,10 @@ use std::fmt::{self, Formatter};
 use thiserror::Error;
 use url::Url;
 
+use super::voyager;
 use crate::api::ApiClientError;
-use crate::class_hash::ClassHash;
-use crate::resolver;
-use crate::voyager;
+use crate::core::class_hash::ClassHash;
+use crate::filesystem::resolver;
 
 /// Error codes for programmatic handling
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -338,13 +338,13 @@ impl fmt::Display for MissingContract {
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
-    Args(#[from] crate::args::ProjectError),
+    Args(#[from] crate::cli::args::ProjectError),
 
     #[error(transparent)]
     Api(#[from] ApiClientError),
 
     #[error(transparent)]
-    ClassHash(#[from] crate::class_hash::ClassHashError),
+    ClassHash(#[from] crate::core::class_hash::ClassHashError),
 
     #[error(transparent)]
     MissingPackage(#[from] MissingPackage),

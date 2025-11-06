@@ -1,14 +1,14 @@
 //! Verification history tracking and local database management
 //!
 //! This module provides functionality for tracking verification jobs in a local
-//! SQLite database at `~/.voyager/history.db`. It allows users to:
+//! `SQLite` database at `~/.voyager/history.db`. It allows users to:
 //! - Track verification progress across sessions
 //! - Query past verifications
 //! - Re-check verification status
 //! - Clean old records
 
 use crate::api::VerifyJobStatus;
-use crate::class_hash::ClassHash;
+use crate::core::class_hash::ClassHash;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use std::fmt::Write as _;

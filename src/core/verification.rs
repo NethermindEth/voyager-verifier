@@ -8,17 +8,18 @@
 //! - Polling and checking verification job status
 //! - Managing the verification lifecycle from submission to completion
 
+use super::project::{determine_project_type, extract_dojo_version, ProjectType};
 use crate::api::{
     ApiClient, ApiClientError, FileInfo, ProjectMetadataInfo, VerificationError, VerificationJob,
     VerifyJobStatus,
 };
-use crate::args::VerifyArgs;
-use crate::errors::CliError;
-use crate::file_collector::{log_verification_info, prepare_project_for_verification};
-use crate::history::{HistoryDb, VerificationRecord};
-use crate::license;
-use crate::project::{determine_project_type, extract_dojo_version, ProjectType};
-use crate::resolver::{collect_source_files, gather_packages_and_validate};
+use crate::cli::args::VerifyArgs;
+use crate::filesystem::{
+    collector::{log_verification_info, prepare_project_for_verification},
+    resolver::{collect_source_files, gather_packages_and_validate},
+};
+use crate::storage::history::{HistoryDb, VerificationRecord};
+use crate::utils::{errors::CliError, license};
 use colored::Colorize;
 use log::{debug, info, warn};
 use scarb_metadata::PackageMetadata;
@@ -352,9 +353,9 @@ pub fn execute_verification(
             }
         },
         |net| match net {
-            crate::args::NetworkKind::Mainnet => "mainnet",
-            crate::args::NetworkKind::Sepolia => "sepolia",
-            crate::args::NetworkKind::Dev => "dev",
+            crate::cli::args::NetworkKind::Mainnet => "mainnet",
+            crate::cli::args::NetworkKind::Sepolia => "sepolia",
+            crate::cli::args::NetworkKind::Dev => "dev",
         },
     );
 
@@ -379,7 +380,7 @@ pub fn execute_verification(
 /// Parameters for saving verification history
 struct HistoryParams<'a> {
     job_id: &'a str,
-    class_hash: &'a crate::class_hash::ClassHash,
+    class_hash: &'a super::class_hash::ClassHash,
     contract_name: &'a str,
     network: &'a str,
     cairo_version: &'a str,
@@ -389,7 +390,9 @@ struct HistoryParams<'a> {
 }
 
 /// Save a verification record to the history database
-fn save_to_history(params: &HistoryParams<'_>) -> Result<(), crate::history::HistoryError> {
+fn save_to_history(
+    params: &HistoryParams<'_>,
+) -> Result<(), crate::storage::history::HistoryError> {
     let db = HistoryDb::open()?;
 
     let record = VerificationRecord::new(
@@ -414,7 +417,7 @@ fn save_to_history(params: &HistoryParams<'_>) -> Result<(), crate::history::His
 fn update_history_status(
     job_id: &str,
     status: VerifyJobStatus,
-) -> Result<(), crate::history::HistoryError> {
+) -> Result<(), crate::storage::history::HistoryError> {
     let db = HistoryDb::open()?;
 
     // Get the existing record to update it
@@ -451,16 +454,16 @@ fn update_history_status(
 pub fn check(
     api_client: &ApiClient,
     job_id: &str,
-    format: &crate::args::OutputFormat,
+    format: &crate::cli::args::OutputFormat,
 ) -> Result<VerificationJob, CliError> {
     // Use polling with callback to show status updates during watch
     let format_copy = *format;
 
     // For text format, show live inline status updates
-    if format_copy == crate::args::OutputFormat::Text {
+    if format_copy == crate::cli::args::OutputFormat::Text {
         use std::io::Write;
         let callback = |status: &VerificationJob| {
-            let inline_status = crate::status_output::format_inline_status(status);
+            let inline_status = crate::output::status::format_inline_status(status);
             // Clear line and update with new status
             print!("\r\x1B[2K{inline_status}");
             std::io::stdout().flush().ok();
@@ -477,7 +480,7 @@ pub fn check(
 
         // Print newline and show final detailed status
         println!();
-        let output = crate::status_output::format_status(&status, format);
+        let output = crate::output::status::format_status(&status, format);
         println!("{output}");
 
         Ok(status)
@@ -490,7 +493,7 @@ pub fn check(
             warn!("Failed to update verification history: {e}");
         }
 
-        let output = crate::status_output::format_status(&status, format);
+        let output = crate::output::status::format_status(&status, format);
         println!("{output}");
 
         Ok(status)
@@ -540,7 +543,7 @@ pub fn display_verbose_error(error: &CliError) {
 /// A single contract in a batch verification job
 #[derive(Debug, Clone)]
 pub struct BatchContract {
-    pub class_hash: crate::class_hash::ClassHash,
+    pub class_hash: super::class_hash::ClassHash,
     pub contract_name: String,
     pub package: Option<String>,
 }
@@ -587,7 +590,7 @@ pub struct BatchVerificationSummary {
 pub fn submit_batch(
     api_client: &ApiClient,
     args: &VerifyArgs,
-    config: &crate::config::Config,
+    config: &crate::cli::config::Config,
     license_info: &license::LicenseInfo,
 ) -> Result<BatchVerificationSummary, CliError> {
     info!(
@@ -606,7 +609,7 @@ pub fn submit_batch(
         );
 
         // Parse class hash
-        let class_hash = match crate::class_hash::ClassHash::new(&contract_config.class_hash) {
+        let class_hash = match super::class_hash::ClassHash::new(&contract_config.class_hash) {
             Ok(hash) => hash,
             Err(e) => {
                 let error_msg = format!("Invalid class hash: {e}");
@@ -723,7 +726,7 @@ pub fn submit_batch(
 pub fn watch_batch(
     api_client: &ApiClient,
     summary: &BatchVerificationSummary,
-    output_format: &crate::args::OutputFormat,
+    output_format: &crate::cli::args::OutputFormat,
 ) -> Result<BatchVerificationSummary, CliError> {
     let job_ids: Vec<&str> = summary
         .results
@@ -798,7 +801,7 @@ pub fn watch_batch(
         }
 
         // Display status update
-        if output_format == &crate::args::OutputFormat::Text {
+        if output_format == &crate::cli::args::OutputFormat::Text {
             print_batch_status_inline(&updated_results, iteration);
         }
 

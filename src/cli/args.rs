@@ -6,7 +6,7 @@ use spdx::LicenseId;
 use std::{env, fmt::Display, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 
-use crate::{class_hash::ClassHash, project::ProjectType};
+use crate::core::{class_hash::ClassHash, project::ProjectType};
 
 static VALID_NAME_REGEX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$"));
@@ -663,14 +663,14 @@ impl clap::Args for Network {
 impl VerifyArgs {
     /// Detect if batch mode should be used based on config
     #[must_use]
-    pub fn is_batch_mode(&self, config: &Option<crate::config::Config>) -> bool {
+    pub fn is_batch_mode(&self, config: &Option<super::config::Config>) -> bool {
         config.as_ref().is_some_and(|cfg| !cfg.contracts.is_empty())
     }
 
     /// Merge configuration file values with CLI arguments
     /// CLI arguments take precedence over config file values
     #[must_use]
-    pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
+    pub fn merge_with_config(mut self, config: &super::config::Config) -> Self {
         // Merge network if not provided via CLI
         if self.network.is_none() {
             self.network = config.parse_network();
@@ -774,7 +774,7 @@ impl StatusArgs {
     /// Merge configuration file values with CLI arguments
     /// CLI arguments take precedence over config file values
     #[must_use]
-    pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
+    pub fn merge_with_config(mut self, config: &super::config::Config) -> Self {
         // Merge network if not provided via CLI
         if self.network.is_none() {
             self.network = config.parse_network();
