@@ -22,6 +22,7 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::E001 => "E001",
@@ -80,7 +81,7 @@ fn edit_distance(s1: &str, s2: &str) -> usize {
 
     for (i, c1) in s1.chars().enumerate() {
         for (j, c2) in s2.chars().enumerate() {
-            let cost = if c1 == c2 { 0 } else { 1 };
+            let cost = usize::from(c1 != c2);
             matrix[i + 1][j + 1] = std::cmp::min(
                 std::cmp::min(
                     matrix[i][j + 1] + 1, // deletion
@@ -109,6 +110,7 @@ impl MissingPackage {
         }
     }
 
+    #[must_use]
     pub const fn error_code(&self) -> ErrorCode {
         ErrorCode::E001
     }
@@ -139,7 +141,11 @@ impl fmt::Display for MissingPackage {
             }
 
             // Find closest match for suggestion
-            let package_names: Vec<String> = self.available.iter().map(|p| p.to_string()).collect();
+            let package_names: Vec<String> = self
+                .available
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect();
             if let Some(suggestion) =
                 find_closest_match(&self.package_id.to_string(), &package_names)
             {
@@ -172,6 +178,7 @@ impl RequestFailure {
         }
     }
 
+    #[must_use]
     pub const fn error_code(&self) -> ErrorCode {
         ErrorCode::E002
     }
@@ -270,6 +277,7 @@ impl MissingContract {
         Self { name, available }
     }
 
+    #[must_use]
     pub const fn error_code(&self) -> ErrorCode {
         ErrorCode::E003
     }
@@ -399,6 +407,7 @@ pub enum CliError {
 }
 
 impl CliError {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::Args(_) => "E020",
