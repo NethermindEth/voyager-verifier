@@ -8,6 +8,10 @@ target/
 bin/
 .vscode/
 
+# mdBook generated output
+book/
+docs/.mdbook-cache/
+
 .claude/
 
 # Local configuration files (keep .voyager.toml.example tracked)
