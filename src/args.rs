@@ -1,19 +1,17 @@
 use camino::Utf8PathBuf;
-use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Url;
 use scarb_metadata::{Metadata, MetadataCommand, MetadataCommandError};
 use spdx::LicenseId;
-use std::{env, fmt::Display, io, path::PathBuf};
+use std::{env, fmt::Display, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 
 use crate::{class_hash::ClassHash, project::ProjectType};
 
-fn get_name_validation_regex() -> Result<&'static Regex, String> {
-    lazy_static! {
-        static ref VALID_NAME_REGEX: Result<Regex, regex::Error> = Regex::new(r"^[a-zA-Z0-9_-]+$");
-    }
+static VALID_NAME_REGEX: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$"));
 
+fn get_name_validation_regex() -> Result<&'static Regex, String> {
     match VALID_NAME_REGEX.as_ref() {
         Ok(regex) => Ok(regex),
         Err(_) => Err("Internal regex compilation error".to_string()),
@@ -39,6 +37,7 @@ pub enum ProjectError {
 }
 
 impl ProjectError {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::MissingManifest(_) => "E020",
@@ -51,6 +50,9 @@ impl ProjectError {
 
 #[allow(dead_code)]
 impl Project {
+    /// # Errors
+    ///
+    /// Returns an error if the manifest file doesn't exist or can't be read
     pub fn new(manifest: &Utf8PathBuf) -> Result<Self, ProjectError> {
         manifest.try_exists().map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => ProjectError::MissingManifest(manifest.clone()),
@@ -73,18 +75,22 @@ impl Project {
         Ok(Self(metadata))
     }
 
+    #[must_use]
     pub const fn manifest_path(&self) -> &Utf8PathBuf {
         &self.0.workspace.manifest_path
     }
 
+    #[must_use]
     pub const fn root_dir(&self) -> &Utf8PathBuf {
         &self.0.workspace.root
     }
 
+    #[must_use]
     pub const fn metadata(&self) -> &Metadata {
         &self.0
     }
 
+    #[must_use]
     pub fn get_license(&self) -> Option<LicenseId> {
         self.0.packages.first().and_then(|pkg| {
             pkg.manifest_metadata
@@ -108,6 +114,10 @@ impl Project {
     }
 
     /// Detect if this is a Dojo project by analyzing dependencies
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project metadata cannot be analyzed
     pub fn detect_project_type(&self) -> Result<ProjectType, ProjectError> {
         let metadata = self.metadata();
 
@@ -121,7 +131,7 @@ impl Project {
         }
 
         // Check for dojo namespace imports in source files
-        if self.has_dojo_imports()? {
+        if self.has_dojo_imports() {
             return Ok(ProjectType::Dojo);
         }
 
@@ -130,7 +140,7 @@ impl Project {
     }
 
     /// Check if source files contain Dojo-specific imports
-    fn has_dojo_imports(&self) -> Result<bool, ProjectError> {
+    fn has_dojo_imports(&self) -> bool {
         use std::fs;
         use walkdir::WalkDir;
 
@@ -138,23 +148,26 @@ impl Project {
         let src_dir = root.join("src");
 
         if !src_dir.exists() {
-            return Ok(false);
+            return false;
         }
 
-        for entry in WalkDir::new(src_dir).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(src_dir)
+            .into_iter()
+            .filter_map(std::result::Result::ok)
+        {
             if entry.path().extension().and_then(|s| s.to_str()) == Some("cairo") {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if content.contains("use dojo::")
                         || content.contains("dojo::")
                         || content.contains("#[dojo::")
                     {
-                        return Ok(true);
+                        return true;
                     }
                 }
             }
         }
 
-        Ok(false)
+        false
     }
 }
 
@@ -164,6 +177,9 @@ impl Display for Project {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the project path is invalid or the manifest cannot be read
 pub fn project_value_parser(raw: &str) -> Result<Project, ProjectError> {
     let path = PathBuf::from(raw);
 
@@ -295,6 +311,9 @@ pub enum Commands {
     History(HistoryArgs),
 }
 
+/// # Errors
+///
+/// Returns an error if the license string is not a valid SPDX license identifier
 pub fn license_value_parser(license: &str) -> Result<LicenseId, String> {
     // First try for exact SPDX identifier match
     if let Some(id) = spdx::license_id(license) {
@@ -329,6 +348,9 @@ pub fn license_value_parser(license: &str) -> Result<LicenseId, String> {
     Err(format!("Unrecognized license: {license}{guess}"))
 }
 
+/// # Errors
+///
+/// Returns an error if the contract name contains invalid characters
 pub fn contract_name_value_parser(name: &str) -> Result<String, String> {
     // Check for minimum length
     if name.is_empty() {
@@ -394,6 +416,7 @@ fn package_name_value_parser(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Args, Clone)]
 pub struct VerifyArgs {
     /// Network to verify on (mainnet, sepolia, dev). If not specified, --url is required
@@ -640,15 +663,14 @@ impl clap::Args for Network {
 
 impl VerifyArgs {
     /// Detect if batch mode should be used based on config
+    #[must_use]
     pub fn is_batch_mode(&self, config: &Option<crate::config::Config>) -> bool {
-        config
-            .as_ref()
-            .map(|cfg| !cfg.contracts.is_empty())
-            .unwrap_or(false)
+        config.as_ref().is_some_and(|cfg| !cfg.contracts.is_empty())
     }
 
     /// Merge configuration file values with CLI arguments
     /// CLI arguments take precedence over config file values
+    #[must_use]
     pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
         // Merge network if not provided via CLI
         if self.network.is_none() {
@@ -703,7 +725,7 @@ impl VerifyArgs {
 
         // Merge package if not provided via CLI
         if self.package.is_none() {
-            self.package = config.workspace.default_package.clone();
+            self.package.clone_from(&config.workspace.default_package);
         }
 
         // Merge project_type if specified in config
@@ -733,6 +755,10 @@ impl VerifyArgs {
     }
 
     /// Validate that all required fields are set after config merging
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required fields are missing or invalid
     pub fn validate(&self) -> Result<(), String> {
         // Check if URL is still the placeholder (means no network, no url, and no config)
         if self.network_url.url.as_str() == "https://placeholder.invalid/" {
@@ -748,6 +774,7 @@ impl VerifyArgs {
 impl StatusArgs {
     /// Merge configuration file values with CLI arguments
     /// CLI arguments take precedence over config file values
+    #[must_use]
     pub fn merge_with_config(mut self, config: &crate::config::Config) -> Self {
         // Merge network if not provided via CLI
         if self.network.is_none() {
@@ -788,6 +815,10 @@ impl StatusArgs {
     }
 
     /// Validate that all required fields are set after config merging
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required fields are missing or invalid
     pub fn validate(&self) -> Result<(), String> {
         // Check if URL is still the placeholder (means no network, no url, and no config)
         if self.network_url.url.as_str() == "https://placeholder.invalid/" {

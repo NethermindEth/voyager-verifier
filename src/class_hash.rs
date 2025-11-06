@@ -25,16 +25,14 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-use lazy_static::lazy_static;
 use regex::Regex;
-use std::fmt;
+use std::{fmt, sync::LazyLock};
 use thiserror::Error;
 
-fn get_class_hash_regex() -> Result<&'static Regex, ClassHashError> {
-    lazy_static! {
-        static ref CLASS_HASH_REGEX: Result<Regex, regex::Error> = Regex::new(r"^0x[a-fA-F0-9]+$");
-    }
+static CLASS_HASH_REGEX: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"^0x[a-fA-F0-9]+$"));
 
+fn get_class_hash_regex() -> Result<&'static Regex, ClassHashError> {
     match CLASS_HASH_REGEX.as_ref() {
         Ok(regex) => Ok(regex),
         Err(_) => Err(ClassHashError::RegexError),
@@ -87,6 +85,7 @@ pub enum ClassHashError {
 }
 
 impl ClassHashError {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::Match(_) => "E010",
