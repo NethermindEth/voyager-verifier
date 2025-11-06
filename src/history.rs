@@ -11,6 +11,7 @@ use crate::api::VerifyJobStatus;
 use crate::class_hash::ClassHash;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -24,14 +25,19 @@ pub enum HistoryError {
 
     #[error("[E042] Unable to determine home directory\n\nSuggestions:\n  • Check that HOME environment variable is set\n  • Verify user has a valid home directory")]
     NoHomeDir,
+
+    #[error("[E043] Failed to format query string: {0}\n\nSuggestions:\n  • This is an internal error, please report it\n  • Check if query parameters are valid")]
+    Format(#[from] std::fmt::Error),
 }
 
 impl HistoryError {
+    #[must_use]
     pub const fn error_code(&self) -> &'static str {
         match self {
             Self::Database(_) => "E040",
             Self::Io(_) => "E041",
             Self::NoHomeDir => "E042",
+            Self::Format(_) => "E043",
         }
     }
 }
@@ -55,6 +61,7 @@ pub struct VerificationRecord {
 
 impl VerificationRecord {
     /// Create a new verification record
+    #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         job_id: String,
@@ -117,6 +124,14 @@ impl HistoryDb {
     }
 
     /// Open or create the history database
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The home directory cannot be determined
+    /// - The `.voyager` directory cannot be created
+    /// - The database file cannot be opened
+    /// - Database tables or indices cannot be created
     pub fn open() -> Result<Self, HistoryError> {
         let db_path = Self::get_db_path()?;
         let conn = Connection::open(db_path)?;
@@ -166,6 +181,10 @@ impl HistoryDb {
     }
 
     /// Insert a new verification record
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert operation fails
     pub fn insert(&self, record: &VerificationRecord) -> Result<i64, HistoryError> {
         self.conn.execute(
             "INSERT INTO verification_history
@@ -191,6 +210,10 @@ impl HistoryDb {
     }
 
     /// Update the status of a verification record by job ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update operation fails
     pub fn update_status(
         &self,
         job_id: &str,
@@ -207,6 +230,10 @@ impl HistoryDb {
     }
 
     /// Get a verification record by job ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query operation fails
     pub fn get_by_job_id(&self, job_id: &str) -> Result<Option<VerificationRecord>, HistoryError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, job_id, class_hash, contract_name, network, status,
@@ -246,6 +273,10 @@ impl HistoryDb {
     }
 
     /// List all verification records, optionally filtered
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query operation fails
     pub fn list(
         &self,
         status_filter: Option<&str>,
@@ -262,16 +293,16 @@ impl HistoryDb {
         let mut params: Vec<String> = Vec::new();
         if let Some(s) = status_filter {
             params.push(s.to_string());
-            query.push_str(&format!(" AND status = ?{}", params.len()));
+            write!(query, " AND status = ?{}", params.len())?;
         }
         if let Some(n) = network_filter {
             params.push(n.to_string());
-            query.push_str(&format!(" AND network = ?{}", params.len()));
+            write!(query, " AND network = ?{}", params.len())?;
         }
         query.push_str(" ORDER BY submitted_at DESC");
 
         if let Some(lim) = limit {
-            query.push_str(&format!(" LIMIT {lim}"));
+            write!(query, " LIMIT {lim}")?;
         }
 
         let mut stmt = self.conn.prepare(&query)?;
@@ -310,6 +341,10 @@ impl HistoryDb {
     }
 
     /// Delete records older than a specified number of days
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete operation fails
     pub fn clean_older_than(&self, days: u32) -> Result<usize, HistoryError> {
         let cutoff = Utc::now() - chrono::Duration::days(i64::from(days));
         let cutoff_str = cutoff.to_rfc3339();
@@ -323,12 +358,20 @@ impl HistoryDb {
     }
 
     /// Delete all records
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete operation fails
     pub fn clean_all(&self) -> Result<usize, HistoryError> {
         let deleted = self.conn.execute("DELETE FROM verification_history", [])?;
         Ok(deleted)
     }
 
     /// Get statistics about verification history
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query operations fail
     pub fn get_stats(&self) -> Result<HistoryStats, HistoryError> {
         let total: i64 =
             self.conn
@@ -354,6 +397,7 @@ impl HistoryDb {
             |row| row.get(0),
         )?;
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(HistoryStats {
             total: total as usize,
             successful: successful as usize,
@@ -366,6 +410,10 @@ impl HistoryDb {
     ///
     /// Returns the average time from submission to completion for the last N
     /// successful verifications. Returns None if there are fewer than `min_samples`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query operations fail
     pub fn get_average_verification_time(
         &self,
         samples: usize,
@@ -389,6 +437,7 @@ impl HistoryDb {
             let completed: DateTime<Utc> = completed_str.parse().unwrap_or_else(|_| Utc::now());
 
             let duration = (completed - submitted).num_seconds();
+            #[allow(clippy::cast_sign_loss)]
             Ok(duration.max(0) as u64)
         })?;
 
