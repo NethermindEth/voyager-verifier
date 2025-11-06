@@ -6,7 +6,7 @@
 //! - Auto-detection based on dependencies and imports
 
 /// Project type for build tool selection
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectType {
     /// Regular Scarb project (uses scarb build)
     Scarb,
@@ -18,6 +18,7 @@ pub enum ProjectType {
 
 impl ProjectType {
     /// Get the build tool name for this project type
+    #[must_use]
     pub const fn build_tool(&self) -> &'static str {
         match self {
             Self::Dojo => "sozo",
@@ -245,9 +246,8 @@ fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
                 if let Some(tag_str) = tag.as_str() {
                     info!("🎯 Successfully extracted Dojo version from tag: {tag_str}");
                     return Some(tag_str.to_string());
-                } else {
-                    warn!("⚠️  Tag field exists but is not a string: {tag:?}");
                 }
+                warn!("⚠️  Tag field exists but is not a string: {tag:?}");
             }
 
             // Case 3: dojo = { version = "1.7.1" } (table with version field)
@@ -257,9 +257,8 @@ fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
                         "🎯 Successfully extracted Dojo version from version field: {version_str}"
                     );
                     return Some(version_str.to_string());
-                } else {
-                    warn!("⚠️  Version field exists but is not a string: {version:?}");
                 }
+                warn!("⚠️  Version field exists but is not a string: {version:?}");
             }
 
             warn!("⚠️  Dojo dependency found but no recognized version format (expected string, 'tag', or 'version' field)");
@@ -298,6 +297,7 @@ fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
 /// let version = extract_dojo_version("/path/to/workspace", Some("/path/to/workspace/packages/my_package"));
 /// assert_eq!(version, Some("1.7.1".to_string()));
 /// ```
+#[must_use]
 pub fn extract_dojo_version(workspace_root: &str, package_root: Option<&str>) -> Option<String> {
     // Try package root first (for workspace subpackages)
     if let Some(pkg_root) = package_root {

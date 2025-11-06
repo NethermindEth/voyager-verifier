@@ -19,7 +19,7 @@ use crate::history::{HistoryDb, VerificationRecord};
 use crate::license;
 use crate::project::{determine_project_type, extract_dojo_version, ProjectType};
 use crate::resolver::{collect_source_files, gather_packages_and_validate};
-use colored::*;
+use colored::Colorize;
 use log::{debug, info, warn};
 use scarb_metadata::PackageMetadata;
 
@@ -64,11 +64,31 @@ pub struct VerificationContext {
 /// # Errors
 ///
 /// Returns a `CliError` if any step of the verification preparation or submission fails.
+#[allow(clippy::too_many_lines)]
 pub fn submit(
     api_client: &ApiClient,
     args: &VerifyArgs,
     license_info: &license::LicenseInfo,
 ) -> Result<String, CliError> {
+    // Define the DryRunPayload structure for dry-run mode
+    #[derive(serde::Serialize)]
+    struct DryRunPayload {
+        compiler_version: String,
+        scarb_version: String,
+        package_name: String,
+        name: String,
+        contract_file: String,
+        #[serde(rename = "contract-name")]
+        contract_name: String,
+        project_dir_path: String,
+        build_tool: String,
+        license: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dojo_version: Option<String>,
+        file_count: usize,
+        file_list: Vec<String>,
+    }
+
     info!("🚀 Starting verification for project at: {}", args.path);
 
     // Validate required fields are present (they should be if not in wizard mode, or populated by wizard)
@@ -114,7 +134,7 @@ pub fn submit(
 
     // Prepare project structure
     let (file_infos, package_meta, contract_file, project_dir_path) =
-        prepare_project_for_verification(args, metadata, &packages, sources)?;
+        prepare_project_for_verification(args, metadata, &packages, &sources)?;
 
     // Log verification info
     log_verification_info(args, metadata, &file_infos, &contract_file, license_info);
@@ -134,8 +154,8 @@ pub fn submit(
     // Dry run: Build and display the full payload that would be sent
     println!("\n✅ Dry run completed successfully!");
     println!("Collected {} file(s) for verification", file_infos.len());
-    println!("Contract: {}", contract_name);
-    println!("Class hash: {}", class_hash);
+    println!("Contract: {contract_name}");
+    println!("Class hash: {class_hash}");
 
     // Build the complete payload
     let cairo_version = metadata.app_version_info.cairo.version.clone();
@@ -145,10 +165,10 @@ pub fn submit(
     let dojo_version = if project_type == ProjectType::Dojo {
         let workspace_root = args.path.root_dir().to_string();
         let package_root = package_meta.root.to_string();
-        let package_root_opt = if package_root != workspace_root {
-            Some(package_root.as_str())
-        } else {
+        let package_root_opt = if package_root == workspace_root {
             None
+        } else {
+            Some(package_root.as_str())
         };
         extract_dojo_version(&workspace_root, package_root_opt)
     } else {
@@ -164,29 +184,11 @@ pub fn submit(
     };
 
     // Build the request payload structure (without file contents for brevity)
-    #[derive(serde::Serialize)]
-    struct DryRunPayload {
-        compiler_version: String,
-        scarb_version: String,
-        package_name: String,
-        name: String,
-        contract_file: String,
-        #[serde(rename = "contract-name")]
-        contract_name: String,
-        project_dir_path: String,
-        build_tool: String,
-        license: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        dojo_version: Option<String>,
-        file_count: usize,
-        file_list: Vec<String>,
-    }
-
     let payload = DryRunPayload {
         compiler_version: cairo_version.to_string(),
         scarb_version: scarb_version.to_string(),
         package_name: package_meta.name,
-        name: contract_name.to_string(),
+        name: contract_name.clone(),
         contract_file: contract_file.clone(),
         contract_name: contract_file,
         project_dir_path,
@@ -200,8 +202,8 @@ pub fn submit(
     // Display the payload as pretty-printed JSON
     println!("\n{}", "=== API Request Payload ===".bright_cyan().bold());
     match serde_json::to_string_pretty(&payload) {
-        Ok(json) => println!("{}", json),
-        Err(e) => warn!("Failed to serialize payload to JSON: {}", e),
+        Ok(json) => println!("{json}"),
+        Err(e) => warn!("Failed to serialize payload to JSON: {e}"),
     }
     println!("{}\n", "=== End Payload ===".bright_cyan().bold());
 
@@ -232,6 +234,7 @@ pub fn submit(
 /// # Errors
 ///
 /// Returns a `CliError` if the verification submission fails.
+#[allow(clippy::too_many_lines)]
 pub fn execute_verification(
     api_client: &ApiClient,
     args: &VerifyArgs,
@@ -287,10 +290,10 @@ pub fn execute_verification(
         let package_root = context.package_meta.root.to_string();
 
         // Only pass package root if it's different from workspace root (i.e., workspace scenario)
-        let package_root_opt = if package_root != workspace_root {
-            Some(package_root.as_str())
-        } else {
+        let package_root_opt = if package_root == workspace_root {
             None
+        } else {
+            Some(package_root.as_str())
         };
 
         let extracted_version = extract_dojo_version(&workspace_root, package_root_opt);
@@ -355,7 +358,7 @@ pub fn execute_verification(
     };
 
     // Save verification record to history database
-    if let Err(e) = save_to_history(HistoryParams {
+    if let Err(e) = save_to_history(&HistoryParams {
         job_id: &job_id,
         class_hash,
         contract_name,
@@ -385,7 +388,7 @@ struct HistoryParams<'a> {
 }
 
 /// Save a verification record to the history database
-fn save_to_history(params: HistoryParams<'_>) -> Result<(), crate::history::HistoryError> {
+fn save_to_history(params: &HistoryParams<'_>) -> Result<(), crate::history::HistoryError> {
     let db = HistoryDb::open()?;
 
     let record = VerificationRecord::new(
@@ -454,11 +457,11 @@ pub fn check(
 
     // For text format, show live inline status updates
     if format_copy == crate::args::OutputFormat::Text {
+        use std::io::Write;
         let callback = |status: &VerificationJob| {
             let inline_status = crate::status_output::format_inline_status(status);
             // Clear line and update with new status
-            print!("\r\x1B[2K{}", inline_status);
-            use std::io::Write;
+            print!("\r\x1B[2K{inline_status}");
             std::io::stdout().flush().ok();
         };
 
@@ -474,7 +477,7 @@ pub fn check(
         // Print newline and show final detailed status
         println!();
         let output = crate::status_output::format_status(&status, format);
-        println!("{}", output);
+        println!("{output}");
 
         Ok(status)
     } else {
@@ -487,7 +490,7 @@ pub fn check(
         }
 
         let output = crate::status_output::format_status(&status, format);
-        println!("{}", output);
+        println!("{output}");
 
         Ok(status)
     }
@@ -524,7 +527,7 @@ pub fn display_verbose_error(error: &CliError) {
         };
 
         eprintln!("\n{}", "--- Detailed Error Output ---".bright_yellow());
-        eprintln!("{}", raw_message);
+        eprintln!("{raw_message}");
         eprintln!("{}\n", "--- End Error Output ---".bright_yellow());
     }
 }
@@ -605,7 +608,7 @@ pub fn submit_batch(
         let class_hash = match crate::class_hash::ClassHash::new(&contract_config.class_hash) {
             Ok(hash) => hash,
             Err(e) => {
-                let error_msg = format!("Invalid class hash: {}", e);
+                let error_msg = format!("Invalid class hash: {e}");
                 println!("  {} {}", "✗".red().bold(), error_msg.red());
                 if args.fail_fast {
                     return Err(CliError::from(e));
@@ -750,15 +753,17 @@ pub fn watch_batch(
                 // Skip if already in terminal state
                 if matches!(
                     result.status,
-                    Some(VerifyJobStatus::Success)
-                        | Some(VerifyJobStatus::Fail)
-                        | Some(VerifyJobStatus::CompileFailed)
+                    Some(
+                        VerifyJobStatus::Success
+                            | VerifyJobStatus::Fail
+                            | VerifyJobStatus::CompileFailed
+                    )
                 ) {
                     continue;
                 }
 
                 // Check job status (single API call, no retry)
-                match api_client.get_job_status(job_id.to_string()) {
+                match api_client.get_job_status(job_id.clone()) {
                     Ok(Some(status)) => {
                         let new_status = *status.status();
                         let status_changed = result.status != Some(new_status);
@@ -776,7 +781,7 @@ pub fn watch_batch(
 
                         // Log status change
                         if status_changed {
-                            debug!("Job {} status changed to {}", job_id, new_status);
+                            debug!("Job {job_id} status changed to {new_status}");
                         }
                     }
                     Ok(None) => {
@@ -784,7 +789,7 @@ pub fn watch_batch(
                         all_complete = false;
                     }
                     Err(e) => {
-                        warn!("Failed to check job {}: {}", job_id, e);
+                        warn!("Failed to check job {job_id}: {e}");
                         result.error = Some(e.to_string());
                     }
                 }
@@ -813,6 +818,8 @@ pub fn watch_batch(
 
 /// Print batch verification status inline (for live updates)
 fn print_batch_status_inline(results: &[BatchVerificationResult], _iteration: u32) {
+    use std::io::Write;
+
     let succeeded = results
         .iter()
         .filter(|r| matches!(r.status, Some(VerifyJobStatus::Success)))
@@ -823,7 +830,7 @@ fn print_batch_status_inline(results: &[BatchVerificationResult], _iteration: u3
         .filter(|r| {
             matches!(
                 r.status,
-                Some(VerifyJobStatus::Fail) | Some(VerifyJobStatus::CompileFailed)
+                Some(VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed)
             ) || r.error.is_some()
         })
         .count();
@@ -833,9 +840,11 @@ fn print_batch_status_inline(results: &[BatchVerificationResult], _iteration: u3
         .filter(|r| {
             matches!(
                 r.status,
-                Some(VerifyJobStatus::Submitted)
-                    | Some(VerifyJobStatus::Processing)
-                    | Some(VerifyJobStatus::Compiled)
+                Some(
+                    VerifyJobStatus::Submitted
+                        | VerifyJobStatus::Processing
+                        | VerifyJobStatus::Compiled
+                )
             )
         })
         .count();
@@ -843,13 +852,12 @@ fn print_batch_status_inline(results: &[BatchVerificationResult], _iteration: u3
     print!(
         "\r\x1B[2K  {} {} | {} {} | {} {}",
         "✓".green(),
-        format!("{} Succeeded", succeeded).green(),
+        format!("{succeeded} Succeeded").green(),
         "⏳".yellow(),
-        format!("{} Pending", pending).yellow(),
+        format!("{pending} Pending").yellow(),
         "✗".red(),
-        format!("{} Failed", failed).red()
+        format!("{failed} Failed").red()
     );
-    use std::io::Write;
     std::io::stdout().flush().ok();
 }
 
@@ -874,7 +882,7 @@ pub fn display_batch_summary(summary: &BatchVerificationSummary) {
         .filter(|r| {
             matches!(
                 r.status,
-                Some(VerifyJobStatus::Fail) | Some(VerifyJobStatus::CompileFailed)
+                Some(VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed)
             ) || r.error.is_some()
         })
         .count();
@@ -885,9 +893,11 @@ pub fn display_batch_summary(summary: &BatchVerificationSummary) {
         .filter(|r| {
             matches!(
                 r.status,
-                Some(VerifyJobStatus::Submitted)
-                    | Some(VerifyJobStatus::Processing)
-                    | Some(VerifyJobStatus::Compiled)
+                Some(
+                    VerifyJobStatus::Submitted
+                        | VerifyJobStatus::Processing
+                        | VerifyJobStatus::Compiled
+                )
             )
         })
         .count();
@@ -924,7 +934,7 @@ pub fn display_batch_summary(summary: &BatchVerificationSummary) {
                 );
                 println!("    Job ID: {}", job_id.cyan());
             }
-            (Some(VerifyJobStatus::Fail), _) | (Some(VerifyJobStatus::CompileFailed), _) => {
+            (Some(VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed), _) => {
                 println!(
                     "  {} {} ({})",
                     "✗".red().bold(),

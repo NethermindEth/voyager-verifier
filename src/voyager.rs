@@ -66,15 +66,15 @@ mod tests {
         let runtime_manifest = Utf8PathBuf::from("/test/project/Scarb.toml");
         let workspace_manifest = Utf8PathBuf::from("/test/project/Scarb.toml");
 
-        // Test the logic: if runtime_manifest is not empty, use it
-        if runtime_manifest != Utf8PathBuf::new() {
+        // Test the logic: if runtime_manifest is empty, fallback to workspace_manifest
+        if runtime_manifest == Utf8PathBuf::new() {
             assert_eq!(
-                runtime_manifest,
+                workspace_manifest,
                 Utf8PathBuf::from("/test/project/Scarb.toml")
             );
         } else {
             assert_eq!(
-                workspace_manifest,
+                runtime_manifest,
                 Utf8PathBuf::from("/test/project/Scarb.toml")
             );
         }
