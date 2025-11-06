@@ -1,0 +1,10 @@
+[files]
+extend-exclude = [
+  # Ignore generated files
+  "book/",
+  "target/",
+]
+
+[default.extend-words]
+# Intentional typos used in documentation examples to show common mistakes
+netwrok = "netwrok"
