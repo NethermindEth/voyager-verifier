@@ -657,8 +657,13 @@ pub struct Network {
 
 impl clap::FromArgMatches for Network {
     fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
-        // Check if wizard mode is enabled
-        let wizard_mode = matches.get_one::<bool>("wizard").copied().unwrap_or(false);
+        // Check if wizard mode is enabled (only present on verify command)
+        let wizard_mode = matches
+            .try_get_one::<bool>("wizard")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false);
 
         if wizard_mode {
             // In wizard mode, provide a placeholder URL that will be replaced by the wizard
@@ -693,8 +698,13 @@ impl clap::FromArgMatches for Network {
         &mut self,
         matches: &mut clap::ArgMatches,
     ) -> Result<(), clap::Error> {
-        // Check if wizard mode is enabled
-        let wizard_mode = matches.get_one::<bool>("wizard").copied().unwrap_or(false);
+        // Check if wizard mode is enabled (only present on verify command)
+        let wizard_mode = matches
+            .try_get_one::<bool>("wizard")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false);
 
         if !wizard_mode {
             // Get URL from CLI args if provided

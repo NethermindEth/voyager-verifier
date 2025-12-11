@@ -1,9 +1,21 @@
 use super::types::VerifyJobStatus;
 use crate::core::project::ProjectType;
 use semver;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+/// Serialize an optional f64 timestamp as an integer
+#[allow(clippy::ref_option, clippy::cast_possible_truncation)]
+fn serialize_timestamp_as_i64<S>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(ts) => serializer.serialize_i64(*ts as i64),
+        None => serializer.serialize_none(),
+    }
+}
 
 /// Response from the class verification check endpoint
 #[derive(Debug, Deserialize, Serialize)]
@@ -16,7 +28,10 @@ pub struct ClassVerificationInfo {
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_timestamp_as_i64"
+    )]
     pub verified_timestamp: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract_file: Option<String>,
