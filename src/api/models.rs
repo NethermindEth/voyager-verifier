@@ -5,6 +5,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Response from the class verification check endpoint
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ClassVerificationInfo {
+    pub verified: bool,
+    pub class_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_timestamp: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_file: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Error {
     pub error: String,

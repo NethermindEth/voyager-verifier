@@ -24,6 +24,9 @@ fn main() -> anyhow::Result<()> {
         Commands::History(args) => {
             commands::history::handle_history_command(args, config.as_ref())?;
         }
+        Commands::Check(args) => {
+            commands::check::handle_check_command(args, config.as_ref())?;
+        }
     }
     Ok(())
 }

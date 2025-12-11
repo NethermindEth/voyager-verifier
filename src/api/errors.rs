@@ -89,6 +89,9 @@ pub enum ApiClientError {
 
     #[error("[E009] Invalid URL format: {0}\n\nSuggestions:\n  • Check the URL format is correct\n  • Ensure proper encoding of special characters\n  • Use absolute URLs with protocol (http:// or https://)")]
     UrlCannotBeBase(#[from] url::ParseError),
+
+    #[error("[E012] Class '{0}' not found on-chain\n\nSuggestions:\n  • Check that the class hash is correct\n  • Verify the class has been declared on the network\n  • Ensure you're using the correct network (mainnet/sepolia)\n  • Use a block explorer to verify the class hash exists")]
+    ClassNotFound(String),
 }
 
 impl ApiClientError {
@@ -102,6 +105,7 @@ impl ApiClientError {
             Self::JobNotFound(_) => "E008",
             Self::Verify(v) => v.error_code(),
             Self::UrlCannotBeBase(_) => "E009",
+            Self::ClassNotFound(_) => "E012",
         }
     }
 }

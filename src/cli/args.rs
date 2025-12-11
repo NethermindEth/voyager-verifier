@@ -308,6 +308,23 @@ pub enum Commands {
     ///   # Show statistics
     ///   voyager history stats
     History(HistoryArgs),
+
+    /// Check if a class is already verified
+    ///
+    /// Queries the verification service to check if a given class hash
+    /// has already been verified. Returns verification status and metadata
+    /// if the class is verified.
+    ///
+    /// Examples:
+    ///   # Check on mainnet
+    ///   voyager check --network mainnet --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18
+    ///
+    ///   # Check on sepolia
+    ///   voyager check --network sepolia --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18
+    ///
+    ///   # Output as JSON
+    ///   voyager check --network mainnet --class-hash 0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18 --json
+    Check(CheckArgs),
 }
 
 /// # Errors
@@ -534,6 +551,78 @@ pub struct StatusArgs {
     /// Output format for status information
     #[arg(long, value_enum, default_value = "text")]
     pub format: OutputFormat,
+}
+
+#[derive(clap::Args)]
+pub struct CheckArgs {
+    /// Network to check on (mainnet, sepolia, dev). If not specified, --url is required
+    #[arg(long, value_enum)]
+    pub network: Option<NetworkKind>,
+
+    #[command(flatten)]
+    pub network_url: Network,
+
+    /// Class hash to check (0x-prefixed hex)
+    #[arg(
+        long = "class-hash",
+        value_name = "HASH",
+        value_parser = ClassHash::new
+    )]
+    pub class_hash: ClassHash,
+
+    /// Output result as JSON
+    #[arg(long, short, default_value_t = false)]
+    pub json: bool,
+
+    /// Show detailed error messages
+    #[arg(short, long, default_value_t = false)]
+    pub verbose: bool,
+}
+
+impl CheckArgs {
+    /// Merge configuration file values with CLI arguments
+    /// CLI arguments take precedence over config file values
+    #[must_use]
+    pub fn merge_with_config(mut self, config: &super::config::Config) -> Self {
+        // Merge network if not provided via CLI
+        if self.network.is_none() {
+            self.network = config.parse_network();
+        }
+
+        // Merge verbose flag
+        if let Some(verbose) = config.voyager.verbose {
+            if !self.verbose {
+                self.verbose = verbose;
+            }
+        }
+
+        // Merge URL if provided in config and not set via CLI or network flag
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            if let Some(ref url_str) = config.voyager.url {
+                if let Ok(parsed_url) = Url::parse(url_str) {
+                    self.network_url.url = parsed_url;
+                }
+            }
+        }
+
+        self
+    }
+
+    /// Validate that all required fields are set after config merging
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required fields are missing or invalid
+    pub fn validate(&self) -> Result<(), String> {
+        // Check if URL is still the placeholder (means no network, no url, and no config)
+        if self.network_url.url.as_str() == "https://placeholder.invalid/" {
+            return Err(
+                "API URL is required. Provide --network, --url, or set 'network' or 'url' in .voyager.toml".to_string()
+            );
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
