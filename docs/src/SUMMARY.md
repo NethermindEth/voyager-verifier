@@ -15,6 +15,7 @@
 - [Command Reference](./commands/README.md)
   - [verify](./commands/verify.md)
   - [status](./commands/status.md)
+  - [check](./commands/check.md)
   - [history](./commands/history.md)
 
 # Verification

@@ -1,6 +1,6 @@
 # Command Reference
 
-Voyager Verifier provides three main commands for contract verification and management.
+Voyager Verifier provides four main commands for contract verification and management.
 
 ## Available Commands
 
@@ -13,6 +13,10 @@ Voyager Verifier provides three main commands for contract verification and mana
 - **[`status`](./status.md)** - Check verification job status
 
   Query the status of a verification job using its job ID. Supports watch mode for continuous monitoring and multiple output formats.
+
+- **[`check`](./check.md)** - Check if a class is already verified
+
+  Query whether a contract class is already verified on Voyager before submitting a verification request. Useful for CI/CD pipelines.
 
 - **[`history`](./history.md)** - Manage verification history
 
@@ -46,6 +50,16 @@ voyager status --network mainnet --job abc-123-def --watch
 
 # JSON output for scripts
 voyager status --network mainnet --job abc-123-def --format json
+```
+
+### Check Verification
+
+```bash
+# Check if class is verified
+voyager check --network mainnet --class-hash 0x044dc2b3...
+
+# JSON output for scripts
+voyager check --network mainnet --class-hash 0x044dc2b3... --json
 ```
 
 ### View History
@@ -264,6 +278,7 @@ Explore detailed documentation for each command:
 
 - **[verify command](./verify.md)** - Complete verification reference
 - **[status command](./status.md)** - Status checking reference
+- **[check command](./check.md)** - Check verification status reference
 - **[history command](./history.md)** - History management reference
 
 For practical examples, see the [Examples section](../examples/README.md).
