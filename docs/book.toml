@@ -3,7 +3,6 @@ title = "Voyager Verifier Documentation"
 authors = ["Nethermind"]
 description = "Official documentation for voyager-verifier - Contract class verification tool for Starknet"
 language = "en"
-multilingual = false
 src = "src"
 
 [build]
