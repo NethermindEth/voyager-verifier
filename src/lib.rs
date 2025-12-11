@@ -29,9 +29,9 @@
 //! // Create a class hash
 //! let class_hash = ClassHash::new("0x044dc2b3239382230d8b1e943df23b96f52eebcac93efe6e8bde92f9a2f1da18")?;
 //!
-//! // Check if the class exists
-//! let exists = client.get_class(&class_hash)?;
-//! println!("Class exists: {}", exists);
+//! // Check if the class is verified
+//! let info = client.check_class_verification(&class_hash)?;
+//! println!("Class verified: {}", info.verified);
 //! # Ok(())
 //! # }
 //! ```

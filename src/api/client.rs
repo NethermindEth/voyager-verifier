@@ -12,8 +12,8 @@ use crate::{core::class_hash::ClassHash, utils::errors::RequestFailure};
 
 use super::errors::{ApiClientError, VerificationError};
 use super::models::{
-    Error, FileInfo, ProjectMetadataInfo, VerificationJob, VerificationJobDispatch,
-    VerificationRequest,
+    ClassVerificationInfo, Error, FileInfo, ProjectMetadataInfo, VerificationJob,
+    VerificationJobDispatch, VerificationRequest,
 };
 use super::types::VerifyJobStatus;
 
@@ -45,41 +45,6 @@ impl ApiClient {
                 base,
                 client: blocking::Client::new(),
             })
-        }
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if the URL cannot be a base.
-    pub fn get_class_url(&self, class_hash: &ClassHash) -> Result<Url, ApiClientError> {
-        let mut url = self.base.clone();
-        let url_clone = url.clone();
-        url.path_segments_mut()
-            .map_err(|()| ApiClientError::CannotBeBase(url_clone))?
-            .extend(&["classes", class_hash.as_ref()]);
-        Ok(url)
-    }
-
-    /// # Errors
-    ///
-    /// Returns `Err` if the required `class_hash` is not found or on
-    /// network failure.
-    pub fn get_class(&self, class_hash: &ClassHash) -> Result<bool, ApiClientError> {
-        let url = self.get_class_url(class_hash)?;
-        let result = self
-            .client
-            .get(url.clone())
-            .send()
-            .map_err(ApiClientError::from)?;
-
-        match result.status() {
-            StatusCode::OK => Ok(true),
-            StatusCode::NOT_FOUND => Ok(false),
-            _ => Err(ApiClientError::from(RequestFailure::new(
-                url,
-                result.status(),
-                result.text()?,
-            ))),
         }
     }
 
@@ -401,6 +366,44 @@ impl ApiClient {
     /// Will return `Err` on network error or if the verification has failed.
     pub fn get_verification_job(&self, job_id: &str) -> Result<VerificationJob, ApiClientError> {
         (self.get_job_status(job_id)?).map_or_else(|| Err(ApiClientError::InProgress), Ok)
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the URL cannot be a base.
+    pub fn get_check_class_url(&self, class_hash: &ClassHash) -> Result<Url, ApiClientError> {
+        let mut url = self.base.clone();
+        let url_clone = url.clone();
+        url.path_segments_mut()
+            .map_err(|()| ApiClientError::CannotBeBase(url_clone))?
+            .extend(&["class-verify", "check", class_hash.as_ref()]);
+        Ok(url)
+    }
+
+    /// Check if a class is verified
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` on network error or if the class is not found on-chain.
+    pub fn check_class_verification(
+        &self,
+        class_hash: &ClassHash,
+    ) -> Result<ClassVerificationInfo, ApiClientError> {
+        let url = self.get_check_class_url(class_hash)?;
+        let response = self.client.get(url.clone()).send()?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let info: ClassVerificationInfo = response.json()?;
+                Ok(info)
+            }
+            StatusCode::NOT_FOUND => Err(ApiClientError::ClassNotFound(class_hash.to_string())),
+            status_code => Err(ApiClientError::from(RequestFailure::new(
+                url,
+                status_code,
+                response.text()?,
+            ))),
+        }
     }
 }
 
