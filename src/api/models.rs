@@ -47,6 +47,22 @@ pub struct VerificationJobDispatch {
     pub job_id: String,
 }
 
+/// Structured error information from the server
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ServerError {
+    pub code: String,
+    pub category: String,
+    pub message: String,
+    #[serde(default)]
+    pub details: Option<String>,
+    #[serde(default)]
+    pub stage: Option<String>,
+    #[serde(default)]
+    pub suggestions: Vec<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct VerificationJob {
     pub job_id: String,
@@ -64,6 +80,20 @@ pub struct VerificationJob {
     pub license: Option<String>,
     pub dojo_version: Option<String>,
     pub build_tool: Option<String>,
+    // New structured error fields
+    #[serde(default)]
+    pub error_code: Option<String>,
+    #[serde(default)]
+    pub error_details: Option<String>,
+    #[serde(default)]
+    pub error_stage: Option<String>,
+    #[serde(default)]
+    pub error_suggestions: Option<Vec<String>>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    /// Nested error object (alternative format from some endpoints)
+    #[serde(default)]
+    pub error: Option<ServerError>,
 }
 
 impl VerificationJob {
@@ -140,6 +170,65 @@ impl VerificationJob {
     #[must_use]
     pub fn build_tool(&self) -> Option<&str> {
         self.build_tool.as_deref()
+    }
+
+    /// Get the error code from structured error info
+    #[must_use]
+    pub fn get_error_code(&self) -> Option<&str> {
+        // Try nested error object first, then flat fields
+        self.error
+            .as_ref()
+            .map(|e| e.code.as_str())
+            .or(self.error_code.as_deref())
+    }
+
+    /// Get the error details from structured error info
+    #[must_use]
+    pub fn get_error_details(&self) -> Option<&str> {
+        self.error
+            .as_ref()
+            .and_then(|e| e.details.as_deref())
+            .or(self.error_details.as_deref())
+    }
+
+    /// Get the error stage from structured error info
+    #[must_use]
+    pub fn get_error_stage(&self) -> Option<&str> {
+        self.error
+            .as_ref()
+            .and_then(|e| e.stage.as_deref())
+            .or(self.error_stage.as_deref())
+    }
+
+    /// Get error suggestions from structured error info
+    #[must_use]
+    pub fn get_error_suggestions(&self) -> Vec<&str> {
+        // Try nested error object first
+        if let Some(ref error) = self.error {
+            if !error.suggestions.is_empty() {
+                return error.suggestions.iter().map(String::as_str).collect();
+            }
+        }
+        // Fall back to flat field
+        self.error_suggestions
+            .as_ref()
+            .map(|s| s.iter().map(String::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    /// Get trace ID for error correlation
+    #[must_use]
+    pub fn get_trace_id(&self) -> Option<&str> {
+        self.error
+            .as_ref()
+            .and_then(|e| e.trace_id.as_deref())
+            .or(self.trace_id.as_deref())
+    }
+
+    /// Check if this job has structured error information
+    #[must_use]
+    pub const fn has_structured_error(&self) -> bool {
+        self.error.is_some() || self.error_code.is_some()
     }
 
     #[must_use]
