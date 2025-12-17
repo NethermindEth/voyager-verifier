@@ -189,6 +189,7 @@ fn progress_bar(percentage: u8) -> String {
 /// # Errors
 ///
 /// Returns `std::fmt::Error` if writing to the output string fails (should never happen in practice).
+#[allow(clippy::too_many_lines)]
 pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
@@ -277,11 +278,54 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
         }
         VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => {
             output.push_str("\n❌ Verification failed!\n");
+
+            // Show error code if available
+            if let Some(code) = job.get_error_code() {
+                writeln!(output, "Error Code: {code}")?;
+            }
+
+            // Show error category if available
+            if let Some(category) = job.error_category() {
+                writeln!(output, "Category: {category}")?;
+            }
+
+            // Show error stage if available
+            if let Some(stage) = job.get_error_stage() {
+                writeln!(output, "Stage: {stage}")?;
+            }
+
+            // Show main error message
             if let Some(desc) = job.status_description() {
                 writeln!(output, "Reason: {desc}")?;
             }
             if let Some(msg) = job.message() {
-                writeln!(output, "Message: {msg}")?;
+                if job.status_description() != Some(msg) {
+                    writeln!(output, "Message: {msg}")?;
+                }
+            }
+
+            // Show error details if available
+            if let Some(details) = job.get_error_details() {
+                writeln!(output, "\nDetails:")?;
+                // Indent the details for readability
+                for line in details.lines() {
+                    writeln!(output, "  {line}")?;
+                }
+            }
+
+            // Show suggestions if available
+            let suggestions = job.get_error_suggestions();
+            if !suggestions.is_empty() {
+                writeln!(output, "\nSuggestions:")?;
+                for suggestion in suggestions {
+                    writeln!(output, "  • {suggestion}")?;
+                }
+            }
+
+            // Show trace ID for support reference
+            if let Some(trace_id) = job.get_trace_id() {
+                writeln!(output, "\nTrace ID: {trace_id}")?;
+                writeln!(output, "(Include this ID when contacting support)")?;
             }
         }
         _ => {
@@ -291,6 +335,25 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     }
 
     Ok(output)
+}
+
+/// Structured error information for JSON output
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonErrorOutput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub suggestions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
 }
 
 /// JSON output structure for programmatic parsing
@@ -308,6 +371,9 @@ pub struct JsonOutput {
     pub status_description: Option<String>,
     pub message: Option<String>,
     pub error_category: Option<String>,
+    // New structured error field
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonErrorOutput>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     pub elapsed_seconds: Option<u64>,
@@ -328,6 +394,25 @@ pub fn format_json(job: &VerificationJob) -> String {
     };
     let estimated_remaining = elapsed.and_then(|e| estimate_remaining_time(*job.status(), e));
 
+    // Build structured error output for failed jobs
+    let error_output = if job.has_failed() && job.has_structured_error() {
+        Some(JsonErrorOutput {
+            code: job.get_error_code().map(String::from),
+            category: job.error_category().map(String::from),
+            message: job.status_description().map(String::from),
+            details: job.get_error_details().map(String::from),
+            stage: job.get_error_stage().map(String::from),
+            suggestions: job
+                .get_error_suggestions()
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            trace_id: job.get_trace_id().map(String::from),
+        })
+    } else {
+        None
+    };
+
     let output = JsonOutput {
         job_id: job.job_id().to_string(),
         status: job.status().to_string(),
@@ -341,6 +426,7 @@ pub fn format_json(job: &VerificationJob) -> String {
         status_description: job.status_description().map(String::from),
         message: job.message().map(String::from),
         error_category: job.error_category().map(String::from),
+        error: error_output,
         created_at: job.created_timestamp().map(format_timestamp),
         updated_at: job.updated_timestamp().map(format_timestamp),
         elapsed_seconds: elapsed,
