@@ -186,6 +186,25 @@ pub fn validate_dojo_project(project: &Project) -> Result<(), CliError> {
     Ok(())
 }
 
+/// Clean a version string by removing semver constraint prefixes.
+///
+/// Scarb.toml may contain version constraints like `"=1.7.1"`, `">=1.0.0"`, `"^2.0.0"`, etc.
+/// The cairo-compiler service expects a clean version number without these prefixes.
+///
+/// # Arguments
+///
+/// * `version` - A version string that may contain constraint prefixes
+///
+/// # Returns
+///
+/// A clean version string with constraint prefixes removed.
+fn clean_version_string(version: &str) -> String {
+    version
+        .trim_start_matches(['=', '>', '<', '^', '~'])
+        .trim()
+        .to_string()
+}
+
 /// Extract Dojo version from Scarb.toml
 ///
 /// Attempts to extract the Dojo version from a Scarb.toml file at the given path.
@@ -201,6 +220,7 @@ pub fn validate_dojo_project(project: &Project) -> Result<(), CliError> {
 /// # Returns
 ///
 /// Returns `Some(version_string)` if a version is found, `None` otherwise.
+/// Version constraint prefixes (=, >=, ^, etc.) are stripped from the result.
 fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
     debug!("📁 Looking for Scarb.toml at: {scarb_toml_path}");
 
@@ -237,15 +257,19 @@ fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
 
             // Case 1: dojo = "1.7.1" (simple string format)
             if let Some(version_str) = dojo_dep.as_str() {
-                info!("🎯 Successfully extracted Dojo version from string: {version_str}");
-                return Some(version_str.to_string());
+                let cleaned = clean_version_string(version_str);
+                info!("🎯 Successfully extracted Dojo version from string: {version_str} -> {cleaned}");
+                return Some(cleaned);
             }
 
             // Case 2: dojo = { tag = "v0.7.0" } (git dependency with tag)
             if let Some(tag) = dojo_dep.get("tag") {
                 if let Some(tag_str) = tag.as_str() {
-                    info!("🎯 Successfully extracted Dojo version from tag: {tag_str}");
-                    return Some(tag_str.to_string());
+                    let cleaned = clean_version_string(tag_str);
+                    info!(
+                        "🎯 Successfully extracted Dojo version from tag: {tag_str} -> {cleaned}"
+                    );
+                    return Some(cleaned);
                 }
                 warn!("⚠️  Tag field exists but is not a string: {tag:?}");
             }
@@ -253,10 +277,11 @@ fn extract_dojo_version_from_file(scarb_toml_path: &str) -> Option<String> {
             // Case 3: dojo = { version = "1.7.1" } (table with version field)
             if let Some(version) = dojo_dep.get("version") {
                 if let Some(version_str) = version.as_str() {
+                    let cleaned = clean_version_string(version_str);
                     info!(
-                        "🎯 Successfully extracted Dojo version from version field: {version_str}"
+                        "🎯 Successfully extracted Dojo version from version field: {version_str} -> {cleaned}"
                     );
-                    return Some(version_str.to_string());
+                    return Some(cleaned);
                 }
                 warn!("⚠️  Version field exists but is not a string: {version:?}");
             }
@@ -592,6 +617,109 @@ starknet = "2.10.0"
 
         // Should fallback to workspace root
         let result = extract_dojo_version(workspace_root, Some(&package_dir));
+        assert_eq!(result, Some("2.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_clean_version_string_no_prefix() {
+        assert_eq!(clean_version_string("1.7.1"), "1.7.1");
+        assert_eq!(clean_version_string("2.0.0"), "2.0.0");
+        assert_eq!(clean_version_string("v1.0.0"), "v1.0.0"); // 'v' is not stripped here
+    }
+
+    #[test]
+    fn test_clean_version_string_equals_prefix() {
+        assert_eq!(clean_version_string("=1.8.0"), "1.8.0");
+        assert_eq!(clean_version_string("=2.0.0"), "2.0.0");
+    }
+
+    #[test]
+    fn test_clean_version_string_comparison_prefixes() {
+        assert_eq!(clean_version_string(">=1.7.0"), "1.7.0");
+        assert_eq!(clean_version_string("<=2.0.0"), "2.0.0");
+        assert_eq!(clean_version_string(">1.0.0"), "1.0.0");
+        assert_eq!(clean_version_string("<3.0.0"), "3.0.0");
+    }
+
+    #[test]
+    fn test_clean_version_string_caret_and_tilde() {
+        assert_eq!(clean_version_string("^1.7.1"), "1.7.1");
+        assert_eq!(clean_version_string("~1.7.0"), "1.7.0");
+    }
+
+    #[test]
+    fn test_clean_version_string_with_whitespace() {
+        assert_eq!(clean_version_string("= 1.8.0"), "1.8.0");
+        assert_eq!(clean_version_string(">= 2.0.0 "), "2.0.0");
+    }
+
+    #[test]
+    fn test_extract_dojo_version_with_equals_constraint() {
+        // Test the actual bug case: dojo = "=1.8.0"
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "bauhash"
+version = "1.0.0"
+
+[dependencies]
+dojo = "=1.8.0"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path, None);
+        assert_eq!(result, Some("1.8.0".to_string()));
+    }
+
+    #[test]
+    fn test_extract_dojo_version_with_caret_constraint() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+dojo = "^1.7.0"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path, None);
+        assert_eq!(result, Some("1.7.0".to_string()));
+    }
+
+    #[test]
+    fn test_extract_dojo_version_with_gte_constraint() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap();
+
+        let scarb_toml_path = format!("{project_path}/Scarb.toml");
+        fs::write(
+            &scarb_toml_path,
+            r#"
+[package]
+name = "test-project"
+version = "1.0.0"
+
+[dependencies]
+dojo = ">=2.0.0"
+"#,
+        )
+        .unwrap();
+
+        let result = extract_dojo_version(project_path, None);
         assert_eq!(result, Some("2.0.0".to_string()));
     }
 }
