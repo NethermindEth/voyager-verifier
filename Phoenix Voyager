@@ -24,9 +24,9 @@
 # /docs/ @NethermindEth/* @martineztatiana2014-web
 
 # Configuration files
-# *.json @NethermindEth/devops-team
-# *.yml @NethermindEth/devops-team
-# *.yaml @NethermindEth/devops-team
+# *.json @NethermindEth/devops-phoenix
+# *.yml @NethermindEth/devops-phoenix
+# *.yaml @NethermindEth/devops-phoenix
 
 # Source code (customize based on your project structure)
 # /src/ @NethermindEth/development-team
