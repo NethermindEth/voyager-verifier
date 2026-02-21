@@ -8,10 +8,10 @@
 # =============================================================================
 # GLOBAL OWNERS
 # =============================================================================
-# These owners will be requested for review on ALL pull requests
+# * @martineztatiana2014-web These owners will be requested for review on ALL pull requests
 # Uncomment and customize the line below:
 
-# * @NethermindEth/your-team-name
+# * @martineztatiana2014-web
 
 # =============================================================================
 # PATH-BASED OWNERSHIP
@@ -20,8 +20,8 @@
 # Examples:
 
 # Documentation
-# *.md @NethermindEth/docs-team
-# /docs/ @NethermindEth/docs-team
+# *.md @NethermindEth/* @martineztatiana2014-web
+# /docs/ @NethermindEth/* @martineztatiana2014-web
 
 # Configuration files
 # *.json @NethermindEth/devops-team
@@ -68,6 +68,4 @@
 # =============================================================================
 # SUGGESTED INDIVIDUALS (based on commit history)
 # =============================================================================
-# * @cwkang1998  # 31 commits
-# * @liam-nethermind  # 30 commits
-# * @ametel01  # 26 commits
+# * @martineztatiana2014-web
