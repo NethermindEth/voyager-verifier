@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Filtered `[dev-dependencies]` from uploaded `Scarb.toml` contents to avoid remote compilation failures on servers without Cargo.
+- Cast `samples` parameter to `i64` in `HistoryDb::get_average_verification_time` to satisfy `rusqlite` 0.39's stricter `ToSql` bounds (`usize` no longer implements `ToSql`).
+
+### Dependencies
+- Upgraded `reqwest` from 0.12 to 0.13.
+- Upgraded `rusqlite` from 0.34 to 0.39 (bundled SQLite).
+- Upgraded `toml` from 0.8 to 1.1.
+- Upgraded `spdx` from 0.10 to 0.13.
+- Upgraded `dialoguer` from 0.11 to 0.12.
+- Upgraded `dirs` from 5.0 to 6.0.
 
 ---
 
