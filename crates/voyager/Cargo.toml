@@ -1,0 +1,24 @@
+[package]
+authors.workspace = true
+description = "Standalone Voyager contract class verification CLI."
+edition.workspace = true
+license.workspace = true
+name = "voyager"
+publish = false
+repository.workspace = true
+version.workspace = true
+default-run = "voyager"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+voyager-verifier = { path = "../voyager-verifier", version = "2.3.0", default-features = false }
+
+[features]
+default = ["notifications"]
+notifications = ["voyager-verifier/notifications"]
+
+[[bin]]
+name = "voyager"
+path = "src/main.rs"
