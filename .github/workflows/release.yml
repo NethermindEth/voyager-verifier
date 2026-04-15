@@ -83,7 +83,7 @@ jobs:
         run: echo "CARGO=cross" >> $GITHUB_ENV
 
       - name: Build
-        run: ${{ env.CARGO }} build --release --locked --target ${{ matrix.target }}
+        run: ${{ env.CARGO }} build --release --locked --package voyager --target ${{ matrix.target }}
 
       - name: Create archive
         shell: bash

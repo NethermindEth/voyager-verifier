@@ -25,6 +25,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ inputs.tag || github.ref_name }}
+      ref: ${{ inputs.tag || github.ref }}
 
   publish_crate:
     needs: [test, build_binaries]
@@ -33,6 +34,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -61,9 +64,9 @@ jobs:
             echo "This is a stable release, will publish to crates.io"
           fi
 
-      - name: Verify version in Cargo.toml
+      - name: Verify version in voyager-verifier Cargo.toml
         run: |
-          CARGO_VERSION=$(grep -m 1 'version =' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "voyager-verifier") | .version')
           echo "Cargo.toml version: $CARGO_VERSION"
           echo "Release version: ${{ steps.get_version.outputs.version }}"
           if [ "$CARGO_VERSION" != "${{ steps.get_version.outputs.version }}" ]; then
@@ -73,7 +76,7 @@ jobs:
 
       - name: Publish to crates.io
         if: steps.get_version.outputs.is_prerelease == 'false'
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish -p voyager-verifier --token ${{ secrets.CRATES_IO_TOKEN }}
 
       - name: Skip crates.io publish for prerelease
         if: steps.get_version.outputs.is_prerelease == 'true'

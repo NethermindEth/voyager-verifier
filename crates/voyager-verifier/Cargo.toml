@@ -1,0 +1,56 @@
+[package]
+authors.workspace = true
+categories = ["command-line-utilities", "development-tools"]
+description = "Reusable library for preparing and submitting Starknet contract class verification requests to Voyager."
+edition.workspace = true
+keywords = ["starknet", "verification", "smart-contracts", "ethereum"]
+license.workspace = true
+name = "voyager-verifier"
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+include = [
+    "/src/**/*.rs",
+    "/Cargo.toml",
+]
+
+[package.metadata.cargo-package-metadata]
+ignored-files = [
+    "Cargo.lock",
+    "Cargo.toml.orig",
+    ".cargo_vcs_info.json",
+    ".github/",
+    "examples/",
+    "Dockerfile",
+    "Makefile",
+    ".cargo/",
+    "rust-toolchain",
+    ".gitignore",
+]
+
+[dependencies]
+anyhow.workspace = true
+backon.workspace = true
+camino.workspace = true
+chrono.workspace = true
+itertools.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+scarb-metadata.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_repr.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+url.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+assert_fs.workspace = true
+mockito.workspace = true
+predicates.workspace = true
+tempfile.workspace = true
+tokio-test.workspace = true

@@ -14,10 +14,8 @@ asdf plugin add voyager https://github.com/NethermindEth/asdf-voyager-verifier.g
 asdf install voyager latest
 ```
 
-**With Cargo:**
-```bash
-cargo install voyager-verifier
-```
+The `voyager-verifier` crates.io package is the reusable Rust library. The standalone
+`voyager` CLI is distributed through asdf and GitHub release artifacts.
 
 ### Basic Usage
 
@@ -57,13 +55,13 @@ For comprehensive documentation, visit **[the official docs](https://netherminde
 ```bash
 git clone https://github.com/NethermindEth/voyager-verifier.git
 cd voyager-verifier
-cargo build --release
+cargo build --package voyager --release
 ```
 
 ### Running Tests
 
 ```bash
-cargo test
+cargo test --workspace
 ```
 
 ### Building Documentation
