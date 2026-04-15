@@ -27,25 +27,6 @@ impl ProjectType {
     }
 }
 
-// Implement clap::ValueEnum for CLI usage
-impl clap::ValueEnum for ProjectType {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Scarb, Self::Dojo, Self::Auto]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Scarb => clap::builder::PossibleValue::new("scarb")
-                .help("Regular Scarb project (uses scarb build)"),
-            Self::Dojo => {
-                clap::builder::PossibleValue::new("dojo").help("Dojo project (uses sozo build)")
-            }
-            Self::Auto => clap::builder::PossibleValue::new("auto")
-                .help("Auto-detect project type with interactive prompt"),
-        })
-    }
-}
-
 impl std::str::FromStr for ProjectType {
     type Err = String;
 
@@ -71,120 +52,8 @@ impl std::fmt::Display for ProjectType {
     }
 }
 
-use crate::cli::args::{Project, VerifyArgs};
-use crate::utils::errors::CliError;
-use dialoguer::Select;
 use log::{debug, info, warn};
 use std::fs;
-
-/// Determine the project type based on arguments and auto-detection
-///
-/// This function resolves the project type using the following priority:
-/// 1. If explicitly set to Scarb or Dojo, uses that and validates
-/// 2. If set to Auto, attempts automatic detection
-/// 3. Falls back to interactive prompt if detection fails
-///
-/// # Arguments
-///
-/// * `args` - Verification arguments containing the project type preference
-///
-/// # Returns
-///
-/// Returns the resolved `ProjectType` (either Scarb or Dojo, never Auto)
-///
-/// # Errors
-///
-/// Returns a `CliError` if:
-/// - Dojo is specified but project doesn't have Dojo dependencies
-/// - Auto-detection or interactive prompt fails
-pub fn determine_project_type(args: &VerifyArgs) -> Result<ProjectType, CliError> {
-    match args.project_type {
-        ProjectType::Scarb => Ok(ProjectType::Scarb),
-        ProjectType::Dojo => {
-            // Validate that this is actually a Dojo project
-            validate_dojo_project(&args.path)?;
-            Ok(ProjectType::Dojo)
-        }
-        ProjectType::Auto => {
-            // Try automatic detection first
-            match args.path.detect_project_type()? {
-                ProjectType::Dojo => {
-                    info!("Detected Dojo project automatically");
-                    Ok(ProjectType::Dojo)
-                }
-                ProjectType::Scarb => {
-                    info!("Detected Scarb project automatically");
-                    Ok(ProjectType::Scarb)
-                }
-                ProjectType::Auto => {
-                    // Fallback to interactive prompt
-                    let options = vec![
-                        "Regular Scarb project (uses scarb build)",
-                        "Dojo project (uses sozo build)",
-                    ];
-
-                    let selection = Select::new()
-                        .with_prompt("What type of project are you verifying?")
-                        .items(&options)
-                        .default(0)
-                        .interact()?;
-
-                    match selection {
-                        0 => Ok(ProjectType::Scarb),
-                        1 => {
-                            validate_dojo_project(&args.path)?;
-                            Ok(ProjectType::Dojo)
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Validate that a project is actually a Dojo project
-///
-/// Checks if the project has Dojo dependencies in its Scarb.toml.
-/// Also verifies that the `sozo` command is available (optional warning).
-///
-/// # Arguments
-///
-/// * `project` - The project configuration to validate
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the project is a valid Dojo project
-///
-/// # Errors
-///
-/// Returns a `CliError` if:
-/// - Project doesn't have Dojo dependencies
-/// - Project type detection fails
-pub fn validate_dojo_project(project: &Project) -> Result<(), CliError> {
-    // Check if sozo is available (optional warning)
-    if std::process::Command::new("sozo")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        warn!("sozo command not found. Dojo project verification will be handled remotely.");
-    }
-
-    // Validate project has Dojo dependencies
-    if project.detect_project_type()? != ProjectType::Dojo {
-        return Err(CliError::InvalidProjectType {
-            specified: "dojo".to_string(),
-            detected: "scarb".to_string(),
-            suggestions: vec![
-                "Add dojo-core dependency to Scarb.toml".to_string(),
-                "Use --project-type=scarb for regular Scarb projects".to_string(),
-            ],
-        });
-    }
-
-    Ok(())
-}
 
 /// Clean a version string by removing semver constraint prefixes.
 ///

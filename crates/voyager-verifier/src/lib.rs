@@ -39,23 +39,16 @@
 /// API client and types for interacting with verification services
 pub mod api;
 
-/// Command-line interface module including arguments, commands, config, and wizard
-pub mod cli;
-
-/// Core verification logic including verification orchestration, project detection, and class hash handling
+/// Core reusable types and project metadata helpers
 pub mod core;
+
+/// Shared error types used by the public API
+pub mod errors;
 
 /// File collection and dependency resolution utilities
 pub mod filesystem;
 
-/// Output formatting and notification support
-pub mod output;
-
-/// Data persistence and history tracking
-pub mod storage;
-
-/// General utilities including errors, license, and Voyager integration
-pub mod utils;
-
+/// Scarb manifest helpers
+pub mod manifest;
 /// Reusable Voyager verification helpers for external CLIs and integrations
 pub mod voyager;

@@ -8,7 +8,7 @@ use reqwest::{
 };
 use url::Url;
 
-use crate::{core::class_hash::ClassHash, utils::errors::RequestFailure};
+use crate::{core::class_hash::ClassHash, errors::RequestFailure};
 
 use super::errors::{ApiClientError, VerificationError};
 use super::models::{

@@ -7,7 +7,7 @@
 #[cfg(feature = "notifications")]
 use notify_rust::Notification;
 
-use crate::api::VerifyJobStatus;
+use voyager_verifier::api::VerifyJobStatus;
 
 /// Send a desktop notification about verification completion
 ///

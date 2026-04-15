@@ -11,13 +11,35 @@ default-run = "voyager"
 
 [dependencies]
 anyhow.workspace = true
+camino.workspace = true
+chrono.workspace = true
 clap.workspace = true
+colored.workspace = true
+dialoguer.workspace = true
+dirs.workspace = true
 env_logger.workspace = true
+itertools.workspace = true
+log.workspace = true
+notify-rust = { workspace = true, optional = true }
+regex.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+scarb-metadata.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+spdx.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+url.workspace = true
 voyager-verifier = { path = "../voyager-verifier", version = "2.3.0", default-features = false }
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [features]
 default = ["notifications"]
-notifications = ["voyager-verifier/notifications"]
+notifications = ["notify-rust"]
 
 [[bin]]
 name = "voyager"

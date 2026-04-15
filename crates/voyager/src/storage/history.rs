@@ -7,13 +7,13 @@
 //! - Re-check verification status
 //! - Clean old records
 
-use crate::api::VerifyJobStatus;
-use crate::core::class_hash::ClassHash;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use thiserror::Error;
+use voyager_verifier::api::VerifyJobStatus;
+use voyager_verifier::core::class_hash::ClassHash;
 
 #[derive(Error, Debug)]
 pub enum HistoryError {

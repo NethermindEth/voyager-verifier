@@ -1,7 +1,17 @@
-use voyager_verifier::cli::args::{Args, Commands};
+#![allow(dead_code)]
+
+mod cli;
+mod errors;
+mod file_collector;
+mod license;
+mod output;
+mod project_detection;
+mod storage;
+mod verification;
 
 use clap::Parser;
-use voyager_verifier::cli::{commands, config::Config};
+use cli::args::{Args, Commands};
+use cli::{commands, config::Config};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

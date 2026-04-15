@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use voyager_verifier::api::{VerificationError, VerifyJobStatus};
 use voyager_verifier::core::class_hash::{ClassHash, ClassHashError};
 use voyager_verifier::filesystem::resolver;
-use voyager_verifier::utils::voyager::{self, Voyager};
+use voyager_verifier::manifest::{self, Voyager};
 
 #[test]
 fn test_class_hash_integration() {
@@ -156,7 +156,7 @@ fn test_error_handling_integration() {
 
     // Test voyager errors
     let json_error = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
-    let voyager_error = voyager::Error::Deserialization(json_error);
+    let voyager_error = manifest::Error::Deserialization(json_error);
     let error_message = format!("{voyager_error}");
     assert!(error_message.contains("expected value"));
 }

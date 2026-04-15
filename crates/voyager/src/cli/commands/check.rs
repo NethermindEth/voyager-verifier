@@ -1,11 +1,11 @@
 use crate::{
-    api::{ApiClient, ApiClientError, ClassVerificationInfo},
     cli::{args::CheckArgs, config::Config},
+    errors::CliError,
     output::status::format_timestamp,
-    utils::errors::CliError,
 };
 use anyhow::Result;
 use colored::Colorize;
+use voyager_verifier::api::{ApiClient, ApiClientError, ClassVerificationInfo};
 
 /// Handles the check command for verifying if a class is already verified
 ///

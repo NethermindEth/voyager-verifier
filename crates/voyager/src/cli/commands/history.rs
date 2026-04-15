@@ -1,14 +1,14 @@
 use crate::{
-    api::ApiClient,
     cli::{
         args::{HistoryArgs, HistoryCommands, Network, NetworkKind},
         config::Config,
     },
-    core::verification::display_verbose_error,
+    errors::CliError,
     storage::history::{HistoryDb, VerificationRecord},
-    utils::errors::CliError,
+    verification::display_verbose_error,
 };
 use anyhow::Result;
+use voyager_verifier::api::ApiClient;
 
 /// Handles all history-related commands (list, status, recheck, clean, stats)
 ///
@@ -126,13 +126,14 @@ fn handle_history_status(
 
             let url = super::super::config::resolve_api_url(network_url, config)?;
             let api_client = ApiClient::new(url)?;
-            let status = crate::api::poll_verification_status(&api_client, job).map_err(|e| {
-                let cli_error = CliError::from(e);
-                if verbose {
-                    display_verbose_error(&cli_error);
-                }
-                cli_error
-            })?;
+            let status = voyager_verifier::api::poll_verification_status(&api_client, job)
+                .map_err(|e| {
+                    let cli_error = CliError::from(e);
+                    if verbose {
+                        display_verbose_error(&cli_error);
+                    }
+                    cli_error
+                })?;
 
             // Update the database record
             rec.update_status(*status.status());
@@ -214,7 +215,7 @@ fn handle_history_recheck(
     let mut updated = 0;
     for mut rec in all_pending {
         print!("Checking {}... ", rec.job_id);
-        match crate::api::poll_verification_status(&api_client, &rec.job_id) {
+        match voyager_verifier::api::poll_verification_status(&api_client, &rec.job_id) {
             Ok(status) => {
                 let old_status = rec.status.clone();
                 rec.update_status(*status.status());

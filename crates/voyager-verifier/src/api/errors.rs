@@ -1,7 +1,7 @@
 use thiserror::Error;
 use url::Url;
 
-use crate::utils::errors::RequestFailure;
+use crate::errors::RequestFailure;
 
 #[derive(Debug, Error)]
 pub enum VerificationError {

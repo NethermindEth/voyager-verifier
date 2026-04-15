@@ -6,12 +6,12 @@
 use super::args::{
     contract_name_value_parser, license_value_parser, Network, NetworkKind, Project, VerifyArgs,
 };
-use crate::core::{class_hash::ClassHash, project::ProjectType};
-use crate::utils::errors::CliError;
+use crate::errors::CliError;
 use dialoguer::{Confirm, Input, Select};
 use reqwest::Url;
 use scarb_metadata::PackageMetadata;
 use spdx::LicenseId;
+use voyager_verifier::core::{class_hash::ClassHash, project::ProjectType};
 
 /// Summary of verification parameters for display
 #[allow(clippy::struct_excessive_bools)]

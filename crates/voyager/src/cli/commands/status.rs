@@ -1,11 +1,11 @@
 use crate::{
-    api::{ApiClient, ApiClientError},
     cli::{args::StatusArgs, config::Config},
-    core::verification::{check, display_verbose_error},
-    utils::errors::CliError,
+    errors::CliError,
+    verification::{check, display_verbose_error},
 };
 use anyhow::Result;
 use log::info;
+use voyager_verifier::api::{ApiClient, ApiClientError};
 
 /// Handles the status command for checking verification job status
 ///
@@ -30,7 +30,7 @@ pub fn handle_status_command(args: StatusArgs, config: Option<&Config>) -> Resul
     }
 
     let api_client = ApiClient::new(args.network_url.url.clone())?;
-    let status = check(&api_client, &args.job, &args.format).inspect_err(|e| {
+    let status = check(&api_client, &args.job, args.format).inspect_err(|e| {
         if args.verbose {
             display_verbose_error(e);
         }

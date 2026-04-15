@@ -1,15 +1,16 @@
 use crate::{
-    api::{ApiClient, ApiClientError},
     cli::{
         args::{OutputFormat, VerifyArgs},
         config::Config,
         wizard,
     },
-    core::verification::{check, display_verbose_error, display_verification_job_id, submit},
-    utils::{errors::CliError, license},
+    errors::CliError,
+    license,
+    verification::{check, display_verbose_error, display_verification_job_id, submit},
 };
 use anyhow::Result;
 use log::info;
+use voyager_verifier::api::{ApiClient, ApiClientError};
 
 /// Handles the verify command with both batch and single verification modes
 ///
@@ -28,9 +29,8 @@ pub fn handle_verify_command(args: VerifyArgs, config: Option<&Config>) -> Resul
         args
     };
 
-    // Detect batch mode - convert Option<&Config> to &Option<Config>
-    let config_owned = config.cloned();
-    let is_batch = args.is_batch_mode(&config_owned);
+    // Detect batch mode
+    let is_batch = VerifyArgs::is_batch_mode(config);
 
     // Validate based on mode
     if !is_batch && !args.wizard {
@@ -52,7 +52,7 @@ pub fn handle_verify_command(args: VerifyArgs, config: Option<&Config>) -> Resul
     }
 
     if is_batch {
-        handle_batch_verification(&args, config_owned.as_ref())?;
+        handle_batch_verification(&args, config)?;
     } else {
         handle_single_verification(args)?;
     }
@@ -105,7 +105,7 @@ fn handle_batch_verification(args: &VerifyArgs, config: Option<&Config>) -> Resu
     license::warn_if_no_license(&license_info);
 
     // Submit batch
-    let summary = crate::core::verification::submit_batch(&api_client, args, cfg, &license_info)
+    let summary = crate::verification::submit_batch(&api_client, args, cfg, &license_info)
         .inspect_err(|e| {
             if args.verbose {
                 display_verbose_error(e);
@@ -113,20 +113,15 @@ fn handle_batch_verification(args: &VerifyArgs, config: Option<&Config>) -> Resu
         })?;
 
     // Display summary
-    crate::core::verification::display_batch_summary(&summary);
+    crate::verification::display_batch_summary(&summary);
 
     // Watch mode
     if args.watch && summary.submitted > 0 {
         let final_summary =
-            crate::core::verification::watch_batch(&api_client, &summary, &OutputFormat::Text)
-                .inspect_err(|e| {
-                    if args.verbose {
-                        display_verbose_error(e);
-                    }
-                })?;
+            crate::verification::watch_batch(&api_client, &summary, OutputFormat::Text);
 
         println!("\n=== Final Summary ===");
-        crate::core::verification::display_batch_summary(&final_summary);
+        crate::verification::display_batch_summary(&final_summary);
     }
 
     Ok(())
@@ -180,7 +175,7 @@ fn handle_single_verification(args: VerifyArgs) -> Result<()> {
 
         // If --watch flag is enabled, poll for verification result
         if args.watch {
-            let status = check(&api_client, &job_id, &OutputFormat::Text).inspect_err(|e| {
+            let status = check(&api_client, &job_id, OutputFormat::Text).inspect_err(|e| {
                 if args.verbose {
                     display_verbose_error(e);
                 }

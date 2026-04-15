@@ -6,7 +6,7 @@ use spdx::LicenseId;
 use std::{env, fmt::Display, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 
-use crate::core::{class_hash::ClassHash, project::ProjectType};
+use voyager_verifier::core::{class_hash::ClassHash, project::ProjectType};
 
 static VALID_NAME_REGEX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$"));
@@ -113,29 +113,26 @@ impl Project {
     }
 
     /// Detect if this is a Dojo project by analyzing dependencies
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the project metadata cannot be analyzed
-    pub fn detect_project_type(&self) -> Result<ProjectType, ProjectError> {
+    #[must_use]
+    pub fn detect_project_type(&self) -> ProjectType {
         let metadata = self.metadata();
 
         // Check for dojo-core dependency in any package
         for package in &metadata.packages {
             for dep in &package.dependencies {
                 if dep.name == "dojo_core" || dep.name == "dojo-core" || dep.name == "dojo" {
-                    return Ok(ProjectType::Dojo);
+                    return ProjectType::Dojo;
                 }
             }
         }
 
         // Check for dojo namespace imports in source files
         if self.has_dojo_imports() {
-            return Ok(ProjectType::Dojo);
+            return ProjectType::Dojo;
         }
 
         // Default to Scarb if no Dojo indicators found
-        Ok(ProjectType::Scarb)
+        ProjectType::Scarb
     }
 
     /// Check if source files contain Dojo-specific imports
@@ -432,6 +429,10 @@ fn package_name_value_parser(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+fn project_type_value_parser(value: &str) -> Result<ProjectType, String> {
+    value.parse()
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Args, Clone)]
 pub struct VerifyArgs {
@@ -503,7 +504,7 @@ pub struct VerifyArgs {
     /// Project type for build tool selection
     #[arg(
         long = "project-type",
-        value_enum,
+        value_parser = project_type_value_parser,
         default_value_t = ProjectType::Auto,
         help = "Specify the project type (scarb, dojo, or auto-detect)"
     )]
@@ -762,8 +763,8 @@ impl clap::Args for Network {
 impl VerifyArgs {
     /// Detect if batch mode should be used based on config
     #[must_use]
-    pub fn is_batch_mode(&self, config: &Option<super::config::Config>) -> bool {
-        config.as_ref().is_some_and(|cfg| !cfg.contracts.is_empty())
+    pub fn is_batch_mode(config: Option<&super::config::Config>) -> bool {
+        config.is_some_and(|cfg| !cfg.contracts.is_empty())
     }
 
     /// Merge configuration file values with CLI arguments

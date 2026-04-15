@@ -8,21 +8,27 @@
 //! - Polling and checking verification job status
 //! - Managing the verification lifecycle from submission to completion
 
-use super::project::{determine_project_type, extract_dojo_version, ProjectType};
-use crate::api::{
-    ApiClient, ApiClientError, FileInfo, ProjectMetadataInfo, VerificationError, VerificationJob,
-    VerifyJobStatus,
+use crate::{
+    cli::args::VerifyArgs,
+    errors::CliError,
+    file_collector::{log_verification_info, prepare_project_for_verification},
+    license,
+    project_detection::determine_project_type,
+    storage::history::{HistoryDb, VerificationRecord},
 };
-use crate::cli::args::VerifyArgs;
-use crate::filesystem::{
-    collector::{log_verification_info, prepare_project_for_verification},
-    resolver::{collect_source_files, gather_packages_and_validate},
-};
-use crate::storage::history::{HistoryDb, VerificationRecord};
-use crate::utils::{errors::CliError, license};
+use camino::Utf8PathBuf;
 use colored::Colorize;
 use log::{debug, info, warn};
-use scarb_metadata::PackageMetadata;
+use scarb_metadata::{Metadata, PackageMetadata};
+use voyager_verifier::{
+    api::{
+        ApiClient, ApiClientError, FileInfo, ProjectMetadataInfo, VerificationError,
+        VerificationJob, VerifyJobStatus,
+    },
+    core::{class_hash::ClassHash, project::extract_dojo_version, project::ProjectType},
+    filesystem::resolver::{gather_packages, package_sources_with_test_files},
+    manifest,
+};
 
 /// Context information for a verification job
 ///
@@ -40,6 +46,60 @@ pub struct VerificationContext {
     pub package_meta: PackageMetadata,
     /// List of all files to be included in the verification
     pub file_infos: Vec<FileInfo>,
+}
+
+fn gather_packages_and_validate(
+    metadata: &Metadata,
+    args: &VerifyArgs,
+) -> Result<Vec<PackageMetadata>, CliError> {
+    let mut packages = vec![];
+    gather_packages(metadata, &mut packages)?;
+
+    let filtered_packages: Vec<&PackageMetadata> = args.package.as_ref().map_or_else(
+        || packages.iter().collect(),
+        |package_id| packages.iter().filter(|p| p.name == *package_id).collect(),
+    );
+
+    if filtered_packages.is_empty() {
+        if let Some(package_name) = &args.package {
+            let available_packages: Vec<String> = packages.iter().map(|p| p.name.clone()).collect();
+            return Err(CliError::from(
+                voyager_verifier::errors::MissingContract::new(
+                    package_name.clone(),
+                    available_packages,
+                ),
+            ));
+        }
+    }
+
+    let workspace_manifest = &metadata.workspace.manifest_path;
+    let manifest_path = manifest::manifest_path(metadata);
+    let is_workspace = workspace_manifest != manifest_path && metadata.workspace.members.len() > 1;
+
+    if args.package.is_none() && is_workspace {
+        let available_packages: Vec<String> = packages.iter().map(|p| p.name.clone()).collect();
+        return Err(CliError::from(
+            voyager_verifier::errors::MissingContract::new(
+                "Workspace project detected - use --package argument".to_string(),
+                available_packages,
+            ),
+        ));
+    }
+
+    Ok(packages)
+}
+
+fn collect_source_files(
+    _metadata: &Metadata,
+    packages: &[PackageMetadata],
+    include_test_files: bool,
+) -> Result<Vec<Utf8PathBuf>, CliError> {
+    let mut sources = vec![];
+    for package in packages {
+        let mut package_sources = package_sources_with_test_files(package, include_test_files)?;
+        sources.append(&mut package_sources);
+    }
+    Ok(sources)
 }
 
 /// Submit a verification job
@@ -380,7 +440,7 @@ pub fn execute_verification(
 /// Parameters for saving verification history
 struct HistoryParams<'a> {
     job_id: &'a str,
-    class_hash: &'a super::class_hash::ClassHash,
+    class_hash: &'a ClassHash,
     contract_name: &'a str,
     network: &'a str,
     cairo_version: &'a str,
@@ -454,13 +514,10 @@ fn update_history_status(
 pub fn check(
     api_client: &ApiClient,
     job_id: &str,
-    format: &crate::cli::args::OutputFormat,
+    format: crate::cli::args::OutputFormat,
 ) -> Result<VerificationJob, CliError> {
-    // Use polling with callback to show status updates during watch
-    let format_copy = *format;
-
     // For text format, show live inline status updates
-    if format_copy == crate::cli::args::OutputFormat::Text {
+    if format == crate::cli::args::OutputFormat::Text {
         use std::io::Write;
         let callback = |status: &VerificationJob| {
             let inline_status = crate::output::status::format_inline_status(status);
@@ -469,9 +526,12 @@ pub fn check(
             std::io::stdout().flush().ok();
         };
 
-        let status =
-            crate::api::poll_verification_status_with_callback(api_client, job_id, Some(&callback))
-                .map_err(CliError::from)?;
+        let status = voyager_verifier::api::poll_verification_status_with_callback(
+            api_client,
+            job_id,
+            Some(&callback),
+        )
+        .map_err(CliError::from)?;
 
         // Update history database with latest status
         if let Err(e) = update_history_status(job_id, *status.status()) {
@@ -486,8 +546,9 @@ pub fn check(
         Ok(status)
     } else {
         // For JSON/table formats, just poll without live updates
-        let status = crate::api::poll_verification_status_with_callback(api_client, job_id, None)
-            .map_err(CliError::from)?;
+        let status =
+            voyager_verifier::api::poll_verification_status_with_callback(api_client, job_id, None)
+                .map_err(CliError::from)?;
 
         if let Err(e) = update_history_status(job_id, *status.status()) {
             warn!("Failed to update verification history: {e}");
@@ -543,7 +604,7 @@ pub fn display_verbose_error(error: &CliError) {
 /// A single contract in a batch verification job
 #[derive(Debug, Clone)]
 pub struct BatchContract {
-    pub class_hash: super::class_hash::ClassHash,
+    pub class_hash: ClassHash,
     pub contract_name: String,
     pub package: Option<String>,
 }
@@ -609,7 +670,7 @@ pub fn submit_batch(
         );
 
         // Parse class hash
-        let class_hash = match super::class_hash::ClassHash::new(&contract_config.class_hash) {
+        let class_hash = match ClassHash::new(&contract_config.class_hash) {
             Ok(hash) => hash,
             Err(e) => {
                 let error_msg = format!("Invalid class hash: {e}");
@@ -720,14 +781,15 @@ pub fn submit_batch(
 ///
 /// Returns an updated `BatchVerificationSummary` with final statuses
 ///
-/// # Errors
+/// Watch all jobs in a batch summary until they reach a terminal state.
 ///
-/// Returns a `CliError` if polling fails critically
+/// Returns an updated `BatchVerificationSummary` with final statuses.
+#[must_use]
 pub fn watch_batch(
     api_client: &ApiClient,
     summary: &BatchVerificationSummary,
-    output_format: &crate::cli::args::OutputFormat,
-) -> Result<BatchVerificationSummary, CliError> {
+    output_format: crate::cli::args::OutputFormat,
+) -> BatchVerificationSummary {
     let job_ids: Vec<&str> = summary
         .results
         .iter()
@@ -735,7 +797,7 @@ pub fn watch_batch(
         .collect();
 
     if job_ids.is_empty() {
-        return Ok(summary.clone()); // Nothing to watch
+        return summary.clone(); // Nothing to watch
     }
 
     println!(
@@ -801,7 +863,7 @@ pub fn watch_batch(
         }
 
         // Display status update
-        if output_format == &crate::cli::args::OutputFormat::Text {
+        if output_format == crate::cli::args::OutputFormat::Text {
             print_batch_status_inline(&updated_results, iteration);
         }
 
@@ -813,11 +875,11 @@ pub fn watch_batch(
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 
-    Ok(BatchVerificationSummary {
+    BatchVerificationSummary {
         total: summary.total,
         submitted: summary.submitted,
         results: updated_results,
-    })
+    }
 }
 
 /// Print batch verification status inline (for live updates)

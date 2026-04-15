@@ -5,12 +5,12 @@
 //! - JSON output for programmatic parsing
 //! - Table format for batch operations
 
-use crate::api::{VerificationJob, VerifyJobStatus};
 use crate::cli::args::OutputFormat;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
+use voyager_verifier::api::{VerificationJob, VerifyJobStatus};
 
 /// Format timestamp as human-readable string
 #[must_use]
@@ -471,7 +471,7 @@ pub fn format_inline_status(job: &VerificationJob) -> String {
 
 /// Main formatting function that delegates to specific formatters
 #[must_use]
-pub fn format_status(job: &VerificationJob, format: &OutputFormat) -> String {
+pub fn format_status(job: &VerificationJob, format: OutputFormat) -> String {
     match format {
         OutputFormat::Text => {
             format_text(job).unwrap_or_else(|_| "Error formatting text".to_string())
