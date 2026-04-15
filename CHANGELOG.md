@@ -28,20 +28,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bumped the crate version from 2.2.0 to 2.3.0.
-- Added `build.rs` to the packaged crate include list so packaging includes the macOS notification linker configuration.
 - Exposed the new `voyager` module from the crate root.
 - Removed the generic `verifier` library target name so Rust consumers import the crate as `voyager_verifier`, derived from the `voyager-verifier` package name.
-- Moved the existing verifier library code, CLI support modules, and tests under `crates/voyager-verifier`.
-- Moved the CLI entrypoint into `crates/voyager` and wired it to depend on the local `voyager-verifier` package.
+- Moved reusable verifier code and integration tests under `crates/voyager-verifier`.
+- Moved CLI args, commands, config handling, wizard, history database, output formatting, notifications, CLI error handling, and the binary entrypoint under `crates/voyager`.
 - Updated release, test, CI, packaging, Makefile, and docs commands for the workspace layout.
 - Updated crates.io publishing to publish only the `voyager-verifier` library package.
 - Updated release builds to build only the `voyager` CLI package.
-- Forwarded the CLI `notifications` feature to `voyager-verifier/notifications`, preserving `--no-default-features` builds for the standalone CLI.
+- Moved the macOS notification linker build script to the `voyager` CLI package.
+- Kept notification support as a `voyager` CLI feature, preserving `--no-default-features` builds for the standalone CLI.
 
 ### Fixed
 - Filtered `[dev-dependencies]` from uploaded `Scarb.toml` contents to avoid remote compilation failures on servers without Cargo.
 - Cast `samples` parameter to `i64` in `HistoryDb::get_average_verification_time` to satisfy `rusqlite` 0.39's stricter `ToSql` bounds (`usize` no longer implements `ToSql`).
-- Kept the published `voyager-verifier` package library-only while preserving the `voyager` binary name for standalone CLI artifacts.
+- Kept the published `voyager-verifier` package library-only while preserving the `voyager` binary name and CLI behavior for standalone artifacts.
+
+### Removed
+- Removed CLI-only modules and dependencies from the published `voyager-verifier` library package, including `clap`, `dialoguer`, `rusqlite`, `dirs`, `notify-rust`, `env_logger`, `colored`, and `spdx`.
 
 ### Dependencies
 - Upgraded `reqwest` from 0.12 to 0.13.
