@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.3.0] - 2026-04-16
+
 ### Added
 - Added a public `voyager` module with reusable verification helpers for downstream CLIs and integrations.
   - Collects Voyager verification files from Scarb metadata.
