@@ -7,6 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added a public `voyager` module with reusable verification helpers for downstream CLIs and integrations.
+  - Collects Voyager verification files from Scarb metadata.
+  - Selects a target workspace package.
+  - Prepares Voyager verification request payloads.
+  - Submits verification requests with either an internal or caller-provided HTTP client.
+  - Builds Voyager verification URLs from API base URLs and class hashes.
+  - Exposes Voyager API URL and endpoint constants.
+- Added `VerificationFiles`, `PreparedVerification`, and `VoyagerVerificationError` types for library consumers.
+- Re-exported `VerificationRequest` from the public `api` module.
+- Added `ACCOMPLISHMENTS.md` documenting the library extraction and downstream `sncast` integration path.
+
+### Changed
+- Bumped the crate version from 2.2.0 to 2.3.0.
+- Added `build.rs` to the packaged crate include list so packaging includes the macOS notification linker configuration.
+- Exposed the new `voyager` module from the crate root.
+- Removed the generic `verifier` library target name so Rust consumers import the crate as `voyager_verifier`, derived from the `voyager-verifier` package name.
+
+### Fixed
+- Filtered `[dev-dependencies]` from uploaded `Scarb.toml` contents to avoid remote compilation failures on servers without Cargo.
+
+---
+
+## [2.2.0] - 2025-12-21
+
+### Summary
+Minor release focused on Dojo dependency version compatibility.
+
+### Fixed
+- Stripped semver constraint prefixes from Dojo version extraction before sending compiler metadata to the cairo-compiler service.
+- Applied version cleanup to all Scarb.toml Dojo dependency formats handled by the extractor:
+  - Direct string versions
+  - Git tag versions
+  - Inline `version` fields
+- Added coverage for common version constraint formats such as `=`, `>=`, `^`, and `~`.
+
+### Changed
+- Bumped package version to 2.2.0.
+
+---
+
+## [2.1.0] - 2025-12-11
+
+### Summary
+Minor release adding a class verification lookup workflow and tightening documentation around CLI usage and Starknet terminology.
+
+### Added
+- New `check` command for checking whether a class is already verified on Voyager.
+  - Added `CheckArgs` with network, URL, class hash, and JSON output support.
+  - Added `ClassVerificationInfo` API response model.
+  - Added `ClassNotFound` error variant (`E012`) for lookup failures.
+  - Added `ApiClient::check_class_verification` for the Voyager class verification endpoint.
+  - Added colorized output and config-file merging for the new command.
+- New documentation page for the `check` command.
+- Comprehensive contributing guidelines covering issue workflow, pull requests, development setup, coding standards, and documentation contributions.
+
+### Changed
+- Updated timestamp serialization for class verification information to use integer timestamps.
+- Improved wizard-mode detection so defaults are applied correctly based on provided verification arguments.
+- Streamlined README into a concise project landing page and moved detailed usage content into the mdBook documentation.
+- Clarified documentation terminology from deployed contracts to declared contract classes where Voyager verification uses class hashes.
+- Reworked API reference documentation to emphasize CLI usage and status understanding instead of direct HTTP endpoint examples.
+- Removed mdBook multilingual configuration because the documentation is English-only.
+- Updated release workflow macOS settings for x86_64 binaries.
+- Corrected package version metadata for the 2.1.0 release.
+
+### Removed
+- Removed deprecated `/classes` endpoint usage after it started returning `403 Forbidden`.
+- Removed remaining direct API endpoint examples from user-facing documentation.
+
+### Documentation
+- Updated installation and supported-version references from the alpha release to v2.0.1.
+- Clarified the difference between declaring contract classes and deploying contract instances in quickstart, examples, troubleshooting, and command references.
+
+---
+
+## [2.0.1] - 2025-11-06
+
+### Summary
+Patch release focused on code quality and internal module organization after the 2.0.0 release.
+
+### Changed
+- Extracted CLI command handling into dedicated command modules for history, status, and verification workflows.
+- Reorganized the source tree into logical modules:
+  - `cli`
+  - `core`
+  - `filesystem`
+  - `output`
+  - `storage`
+  - `utils`
+- Replaced `lazy_static` regex initialization with `std::sync::LazyLock`.
+- Added stricter linting through clippy pedantic, nursery, and cargo lint groups.
+- Added `#[must_use]` annotations and documentation comments across public helpers and models.
+- Improved API, config, file collection, history, project, resolver, status output, verification, wizard, license, and error utility code quality.
+- Applied clippy-driven simplifications, including more idiomatic option handling, tuple variant constructors, inline formatting, and iterator usage.
+
+### Fixed
+- Improved internal error handling and type safety in file collection, config resolution, API mapping, and verification helpers.
+- Kept the full test suite passing after the module reorganization.
+
 ---
 
 ## [2.0.0] - 2025-11-06
