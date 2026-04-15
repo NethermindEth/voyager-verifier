@@ -41,22 +41,22 @@ itertools = "0.14"
 log = "0.4"
 regex = "1"
 lazy_static = "1.5"
-reqwest = { version = "0.12", features = ["blocking", "json", "native-tls-vendored"] }
+reqwest = { version = "0.13", features = ["blocking", "json", "native-tls-vendored"] }
 scarb-metadata = "1.15"
 semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_repr = "0.1.20"
-spdx = "0.10"
+spdx = "0.13"
 thiserror = "2.0"
-toml = "0.8"
+toml = "1.1"
 url = "2.5"
 walkdir = "2.5"
 colored = "3.1.1"
 chrono = "0.4"
-dialoguer = "0.11.0"
-rusqlite = { version = "0.34.0", features = ["bundled"] }
-dirs = "5.0"
+dialoguer = "0.12.0"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
+dirs = "6.0"
 notify-rust = { version = "4.15", optional = true }
 
 [features]
