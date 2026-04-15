@@ -1,6 +1,6 @@
 # Installation
 
-Voyager Verifier can be installed using two primary methods: **asdf** (recommended) or **Cargo** (Rust's package manager).
+Voyager Verifier can be installed using **asdf** for released binaries, or built from source with Cargo.
 
 ## Choose Your Installation Method
 
@@ -15,9 +15,9 @@ asdf is a version manager that simplifies installation and allows you to manage 
 
 [Continue to asdf installation →](./asdf.md)
 
-### Cargo
+### Cargo from Source
 
-Install directly from source using Cargo. This method is ideal if you're already familiar with the Rust ecosystem or want the latest development version.
+Build directly from source using Cargo. This method is ideal if you're already familiar with the Rust ecosystem or want the latest development version.
 
 **Best for:**
 - Rust developers
@@ -53,7 +53,7 @@ After successful installation, head to the [Quickstart Guide](./quickstart.md) t
 If you encounter issues during installation:
 
 - **asdf users**: Ensure asdf is properly installed and configured in your shell
-- **Cargo users**: Ensure you have the latest stable Rust toolchain (`rustup update`)
+- **Cargo source builds**: Ensure you have the latest stable Rust toolchain (`rustup update`)
 - **Build errors**: Check that you have required system dependencies (OpenSSL, pkg-config)
 
 For more help, see the [Troubleshooting Guide](../troubleshooting/README.md).

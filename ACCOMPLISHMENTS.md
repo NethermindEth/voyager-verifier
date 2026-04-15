@@ -6,7 +6,7 @@ Extracted the Voyager verification logic used by `sncast` into the `voyager-veri
 
 ## Changes in `voyager-verifier`
 
-- Added a new public `voyager_verifier::voyager` module in `src/voyager.rs`.
+- Added a new public `voyager_verifier::voyager` module in `crates/voyager-verifier/src/voyager.rs`.
 - Added reusable helpers for:
   - collecting Voyager verification files from Scarb metadata;
   - selecting a target workspace package;
@@ -15,9 +15,12 @@ Extracted the Voyager verification logic used by `sncast` into the `voyager-veri
   - building Voyager verification URLs;
   - filtering `[dev-dependencies]` from uploaded `Scarb.toml` files.
 - Re-exported `VerificationRequest` from `voyager_verifier::api`.
-- Exposed the new `voyager` module from `src/lib.rs`.
+- Exposed the new `voyager` module from `crates/voyager-verifier/src/lib.rs`.
 - Bumped the crate version from `2.2.0` to `2.3.0` because `2.2.0` is already published on crates.io.
 - Added `build.rs` to the package include list so `cargo package` verifies successfully with the default macOS notifications feature.
+- Split the repository into a Cargo workspace with:
+  - `crates/voyager-verifier` for the reusable library published to crates.io;
+  - `crates/voyager` for the standalone CLI binary used by GitHub release artifacts and asdf.
 
 ## Changes in `starknet-foundry`
 
@@ -26,7 +29,7 @@ Extracted the Voyager verification logic used by `sncast` into the `voyager-veri
 - Kept the local path dependency for development:
 
 ```toml
-voyager-verifier = { version = "2.3.0", path = "../../../voyager-verifier", default-features = false }
+voyager-verifier = { version = "2.3.0", path = "../../../voyager-verifier/crates/voyager-verifier", default-features = false }
 ```
 
 After `voyager-verifier` `2.3.0` is published, `sncast` can remove the `path` field and depend on the crates.io version.
@@ -50,7 +53,7 @@ The crate is packaged and ready for publishing as `voyager-verifier` `2.3.0`, bu
 While developing locally, add the dependency to `crates/sncast/Cargo.toml` with both `version` and `path`:
 
 ```toml
-voyager-verifier = { version = "2.3.0", path = "../../../voyager-verifier", default-features = false }
+voyager-verifier = { version = "2.3.0", path = "../../../voyager-verifier/crates/voyager-verifier", default-features = false }
 ```
 
 After `voyager-verifier` `2.3.0` is published to crates.io, remove the `path` field:

@@ -31,22 +31,18 @@ For more details, see the [official Rust installation guide](https://www.rust-la
 
 ## Installation
 
-### Install from crates.io
+### Crates.io Package
 
-Install the latest published version from crates.io:
-
-```bash
-cargo install voyager-verifier
-```
-
-This will download, compile, and install the `voyager` binary to `~/.cargo/bin/`.
+The `voyager-verifier` crates.io package is the reusable Rust library. For released
+CLI binaries, use the asdf installation path. Cargo is still useful for building the
+CLI from source.
 
 ### Install Specific Version
 
-To install a specific version:
+To install a specific tagged version from source:
 
 ```bash
-cargo install voyager-verifier --version 2.0.1
+cargo install --git https://github.com/NethermindEth/voyager-verifier.git --tag v2.3.0 voyager
 ```
 
 ### Install from Git Repository
@@ -54,19 +50,19 @@ cargo install voyager-verifier --version 2.0.1
 To install the latest development version directly from the GitHub repository:
 
 ```bash
-cargo install --git https://github.com/NethermindEth/voyager-verifier.git
+cargo install --git https://github.com/NethermindEth/voyager-verifier.git voyager
 ```
 
 Install a specific branch:
 
 ```bash
-cargo install --git https://github.com/NethermindEth/voyager-verifier.git --branch main
+cargo install --git https://github.com/NethermindEth/voyager-verifier.git --branch main voyager
 ```
 
 Install a specific commit:
 
 ```bash
-cargo install --git https://github.com/NethermindEth/voyager-verifier.git --rev abc123
+cargo install --git https://github.com/NethermindEth/voyager-verifier.git --rev abc123 voyager
 ```
 
 ## Build Options
@@ -76,7 +72,7 @@ cargo install --git https://github.com/NethermindEth/voyager-verifier.git --rev 
 If you want to build without desktop notification support (reduces dependencies):
 
 ```bash
-cargo install voyager-verifier --no-default-features
+cargo install --path crates/voyager --no-default-features
 ```
 
 ### With Specific Features
@@ -85,7 +81,7 @@ Enable specific features during installation:
 
 ```bash
 # With notifications (default)
-cargo install voyager-verifier --features notifications
+cargo install --path crates/voyager --features notifications
 ```
 
 ## Verify Installation
@@ -158,7 +154,7 @@ cd voyager-verifier
 Build in release mode:
 
 ```bash
-cargo build --release
+cargo build --package voyager --release
 ```
 
 The binary will be in `target/release/voyager`.
@@ -168,7 +164,7 @@ The binary will be in `target/release/voyager`.
 Run directly without installing:
 
 ```bash
-cargo run -- --version
+cargo run --package voyager -- --version
 ```
 
 ### Install Local Build
@@ -176,7 +172,7 @@ cargo run -- --version
 Install the locally built version:
 
 ```bash
-cargo install --path .
+cargo install --path crates/voyager
 ```
 
 ## Troubleshooting

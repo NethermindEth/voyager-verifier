@@ -22,16 +22,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `VerificationFiles`, `PreparedVerification`, and `VoyagerVerificationError` types for library consumers.
 - Re-exported `VerificationRequest` from the public `api` module.
 - Added `ACCOMPLISHMENTS.md` documenting the library extraction and downstream `sncast` integration path.
+- Split the repository into a Cargo workspace with separate packages:
+  - `crates/voyager-verifier`: publishable `voyager-verifier` library crate for external Rust consumers.
+  - `crates/voyager`: standalone `voyager` CLI package for GitHub release artifacts and asdf distribution.
 
 ### Changed
 - Bumped the crate version from 2.2.0 to 2.3.0.
 - Added `build.rs` to the packaged crate include list so packaging includes the macOS notification linker configuration.
 - Exposed the new `voyager` module from the crate root.
 - Removed the generic `verifier` library target name so Rust consumers import the crate as `voyager_verifier`, derived from the `voyager-verifier` package name.
+- Moved the existing verifier library code, CLI support modules, and tests under `crates/voyager-verifier`.
+- Moved the CLI entrypoint into `crates/voyager` and wired it to depend on the local `voyager-verifier` package.
+- Updated release, test, CI, packaging, Makefile, and docs commands for the workspace layout.
+- Updated crates.io publishing to publish only the `voyager-verifier` library package.
+- Updated release builds to build only the `voyager` CLI package.
+- Forwarded the CLI `notifications` feature to `voyager-verifier/notifications`, preserving `--no-default-features` builds for the standalone CLI.
 
 ### Fixed
 - Filtered `[dev-dependencies]` from uploaded `Scarb.toml` contents to avoid remote compilation failures on servers without Cargo.
 - Cast `samples` parameter to `i64` in `HistoryDb::get_average_verification_time` to satisfy `rusqlite` 0.39's stricter `ToSql` bounds (`usize` no longer implements `ToSql`).
+- Kept the published `voyager-verifier` package library-only while preserving the `voyager` binary name for standalone CLI artifacts.
 
 ### Dependencies
 - Upgraded `reqwest` from 0.12 to 0.13.
