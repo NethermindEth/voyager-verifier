@@ -1,7 +1,7 @@
-use verifier::cli::args::{Args, Commands};
+use voyager_verifier::cli::args::{Args, Commands};
 
 use clap::Parser;
-use verifier::cli::{commands, config::Config};
+use voyager_verifier::cli::{commands, config::Config};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

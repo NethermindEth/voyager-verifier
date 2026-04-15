@@ -14,8 +14,8 @@
 //! ## Example Usage
 //!
 //! ```rust,no_run
-//! use verifier::api::{ApiClient, ClassVerificationInfo};
-//! use verifier::core::class_hash::ClassHash;
+//! use voyager_verifier::api::{ApiClient, ClassVerificationInfo};
+//! use voyager_verifier::core::class_hash::ClassHash;
 //! use url::Url;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +39,7 @@ pub use self::{
     errors::{ApiClientError, VerificationError},
     models::{
         ClassVerificationInfo, FileInfo, ProjectMetadataInfo, VerificationJob,
-        VerificationJobDispatch,
+        VerificationJobDispatch, VerificationRequest,
     },
     polling::poll_verification_status,
     types::{JobStatus, Status, VerifyJobStatus},

@@ -16,7 +16,7 @@
 //! ## Example Usage
 //!
 //! ```rust,no_run
-//! use verifier::{
+//! use voyager_verifier::{
 //!     api::ApiClient,
 //!     core::class_hash::ClassHash,
 //! };
@@ -56,3 +56,6 @@ pub mod storage;
 
 /// General utilities including errors, license, and Voyager integration
 pub mod utils;
+
+/// Reusable Voyager verification helpers for external CLIs and integrations
+pub mod voyager;

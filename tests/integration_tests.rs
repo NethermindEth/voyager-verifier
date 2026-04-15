@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use verifier::api::{VerificationError, VerifyJobStatus};
-use verifier::core::class_hash::{ClassHash, ClassHashError};
-use verifier::filesystem::resolver;
-use verifier::utils::voyager::{self, Voyager};
+use voyager_verifier::api::{VerificationError, VerifyJobStatus};
+use voyager_verifier::core::class_hash::{ClassHash, ClassHashError};
+use voyager_verifier::filesystem::resolver;
+use voyager_verifier::utils::voyager::{self, Voyager};
 
 #[test]
 fn test_class_hash_integration() {
@@ -164,7 +164,7 @@ fn test_error_handling_integration() {
 #[test]
 fn test_path_handling_integration() {
     use camino::Utf8PathBuf;
-    use verifier::filesystem::resolver::biggest_common_prefix;
+    use voyager_verifier::filesystem::resolver::biggest_common_prefix;
 
     // Test realistic path scenarios
     let paths = vec![

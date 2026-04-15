@@ -2,10 +2,10 @@
 
 use reqwest::StatusCode;
 use url::Url;
-use verifier::api::{ApiClientError, VerificationError};
-use verifier::core::class_hash::{ClassHash, ClassHashError};
-use verifier::filesystem::resolver;
-use verifier::utils::errors::{MissingContract, RequestFailure};
+use voyager_verifier::api::{ApiClientError, VerificationError};
+use voyager_verifier::core::class_hash::{ClassHash, ClassHashError};
+use voyager_verifier::filesystem::resolver;
+use voyager_verifier::utils::errors::{MissingContract, RequestFailure};
 
 #[test]
 fn test_missing_contract_error_with_suggestions() {
