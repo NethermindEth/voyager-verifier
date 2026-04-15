@@ -429,7 +429,7 @@ impl HistoryDb {
 
         let mut durations = Vec::new();
 
-        let rows = stmt.query_map(params![samples], |row| {
+        let rows = stmt.query_map(params![samples as i64], |row| {
             let submitted_str: String = row.get(0)?;
             let completed_str: String = row.get(1)?;
 
