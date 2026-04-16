@@ -295,6 +295,7 @@ fn handle_history_stats() -> Result<()> {
 
     let db = HistoryDb::open()?;
     let stats = db.get_stats()?;
+    let percentage = |count: usize| (count * 100).checked_div(stats.total).unwrap_or(0);
 
     println!("\n{}", "Verification History Statistics".bold().underline());
     println!();
@@ -302,29 +303,17 @@ fn handle_history_stats() -> Result<()> {
     println!(
         "Successful: {} ({}%)",
         stats.successful.to_string().green().bold(),
-        if stats.total > 0 {
-            stats.successful * 100 / stats.total
-        } else {
-            0
-        }
+        percentage(stats.successful)
     );
     println!(
         "Failed: {} ({}%)",
         stats.failed.to_string().red().bold(),
-        if stats.total > 0 {
-            stats.failed * 100 / stats.total
-        } else {
-            0
-        }
+        percentage(stats.failed)
     );
     println!(
         "Pending: {} ({}%)",
         stats.pending.to_string().yellow(),
-        if stats.total > 0 {
-            stats.pending * 100 / stats.total
-        } else {
-            0
-        }
+        percentage(stats.pending)
     );
     println!();
 
