@@ -209,7 +209,7 @@ fn test_status_display_integration() {
         "Unknown",
     ];
 
-    for (status, expected) in statuses.into_iter().zip(expected_displays.into_iter()) {
+    for (status, expected) in statuses.into_iter().zip(expected_displays) {
         assert_eq!(format!("{status}"), expected);
     }
 }
