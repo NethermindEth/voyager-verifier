@@ -150,7 +150,7 @@ pub fn package_sources_with_test_files(
     }
 
     let root = &package_metadata.root;
-    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(root.clone())
+    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(root)
         .into_iter()
         .filter_map(std::result::Result::ok)
         .filter(|f| f.file_type().is_file())
@@ -222,17 +222,15 @@ fn should_include_source_file(
         return false;
     };
 
-    let components: Vec<_> = relative.components().collect();
-    let first = match components.first() {
+    let mut components = relative.components();
+    let first = match components.next() {
         Some(c) => c.as_os_str(),
         None => return false,
     };
 
     if first == "src" {
         // Within src/, honour test sub-directories based on the caller's preference.
-        let in_test_dir = components
-            .iter()
-            .any(|c| c.as_os_str() == "test" || c.as_os_str() == "tests");
+        let in_test_dir = components.any(|c| c.as_os_str() == "test" || c.as_os_str() == "tests");
         if in_test_dir {
             return include_test_files;
         }
