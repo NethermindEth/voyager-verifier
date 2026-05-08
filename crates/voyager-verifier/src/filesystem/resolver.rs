@@ -218,9 +218,8 @@ fn should_include_source_file(
     root: &Utf8Path,
     include_test_files: bool,
 ) -> bool {
-    let relative = match entry.path().strip_prefix(root) {
-        Ok(p) => p,
-        Err(_) => return false,
+    let Ok(relative) = entry.path().strip_prefix(root) else {
+        return false;
     };
 
     let components: Vec<_> = relative.components().collect();
