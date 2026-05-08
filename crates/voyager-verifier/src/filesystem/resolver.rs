@@ -795,7 +795,7 @@ mod tests {
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
         {
-            let relative = entry.path().strip_prefix(&root).unwrap().to_string_lossy();
+            let relative = Utf8Path::from_path(entry.path().strip_prefix(&root).unwrap()).unwrap();
 
             let expected = test_cases
                 .iter()
@@ -816,7 +816,7 @@ mod tests {
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
         {
-            let relative = entry.path().strip_prefix(&root).unwrap().to_string_lossy();
+            let relative = Utf8Path::from_path(entry.path().strip_prefix(&root).unwrap()).unwrap();
 
             let expected = test_cases
                 .iter()
