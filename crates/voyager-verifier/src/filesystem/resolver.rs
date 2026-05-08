@@ -231,8 +231,8 @@ fn should_include_source_file(
     if first == "src" {
         // Within src/, honour test sub-directories based on the caller's preference.
         let in_test_dir = components.any(|c| c.as_os_str() == "test" || c.as_os_str() == "tests");
-        if in_test_dir {
-            return include_test_files;
+        if in_test_dir && !include_test_files {
+            return false;
         }
     } else if first == "test" || first == "tests" || first == "examples" || first == "benchmarks" {
         // Always exclude these top-level directories.
@@ -704,7 +704,6 @@ fn should_exclude_rust_file(file_path: &Utf8Path) -> bool {
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]
@@ -760,73 +759,77 @@ mod tests {
     #[test]
     fn test_file_filtering_logic() {
         let temp_dir = TempDir::new().unwrap();
-        let temp_path = PathBuf::from(temp_dir.path());
+        let root =
+            Utf8PathBuf::try_from(temp_dir.path().join("example/benchmarks/tests/test")).unwrap();
 
-        // Create test directory structure
-        std::fs::create_dir_all(temp_path.join("src")).unwrap();
-        std::fs::create_dir_all(temp_path.join("tests")).unwrap();
-        std::fs::create_dir_all(temp_path.join("examples")).unwrap();
+        let test_cases = [
+            //File name | Expected with            | Expected with
+            //          | include_test_files=false | include_test_files=true
+            ("src/lib.cairo", true, true),
+            ("src/main.rs", false, false),
+            ("src/test/test.cairo", false, true),
+            ("src/tests/test.cairo", false, true),
+            ("src/dir/test/test.cairo", false, true),
+            ("src/dir/test/test.rs", false, false),
+            ("tests/integration.cairo", false, false),
+            ("examples/example.cairo", false, false),
+            ("benchmarks/bench.cairo", false, false),
+            ("Scarb.toml", true, true),
+            ("root_file.cairo", true, true),
+        ];
 
-        // Create test files
-        std::fs::write(temp_path.join("src").join("lib.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("src").join("main.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("tests").join("test.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("examples").join("example.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("Scarb.toml"), "").unwrap();
-        std::fs::write(temp_path.join("other.txt"), "").unwrap();
+        // Create files
+        for (path, _, _) in &test_cases {
+            let full_path = root.join(path);
 
-        // Test the filtering logic used in package_sources
-        let cairo_files: Vec<_> = walkdir::WalkDir::new(&temp_path)
+            if let Some(parent) = full_path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+
+            fs::write(full_path, "").unwrap();
+        }
+
+        // Test include_test_files = false
+        for entry in WalkDir::new(&root)
             .into_iter()
-            .filter_map(std::result::Result::ok)
-            .filter(|f| f.file_type().is_file())
-            .filter(|f| {
-                // Test the exclusion logic
-                if let Some(path_str) = f.path().to_str() {
-                    if path_str.contains("/tests/")
-                        || path_str.contains("/test/")
-                        || path_str.contains("/examples/")
-                        || path_str.contains("/benchmarks/")
-                    {
-                        return false;
-                    }
-                }
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let relative = entry.path().strip_prefix(&root).unwrap().to_string_lossy();
 
-                // Test the inclusion logic
-                if let Some(ext) = f.path().extension() {
-                    if ext == std::ffi::OsStr::new(CAIRO_EXT) {
-                        return true;
-                    }
-                }
+            let expected = test_cases
+                .iter()
+                .find(|(path, _, _)| *path == relative)
+                .map(|(_, expected, _)| *expected)
+                .unwrap();
 
-                // Test Scarb.toml inclusion
-                if f.file_name() == std::ffi::OsStr::new("Scarb.toml") {
-                    return true;
-                }
+            assert_eq!(
+                should_include_source_file(&entry, &root, false),
+                expected,
+                "unexpected result for {relative} with include_test_files=false"
+            );
+        }
 
-                false
-            })
-            .collect();
+        // Test include_test_files = true
+        for entry in WalkDir::new(&root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let relative = entry.path().strip_prefix(&root).unwrap().to_string_lossy();
 
-        // Should include cairo files from src, Scarb.toml, but not from tests or examples
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("lib.cairo")));
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("main.cairo")));
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("Scarb.toml")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.path().to_str().unwrap().contains("/tests/")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.path().to_str().unwrap().contains("/examples/")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("other.txt")));
+            let expected = test_cases
+                .iter()
+                .find(|(path, _, _)| *path == relative)
+                .map(|(_, _, expected)| *expected)
+                .unwrap();
+
+            assert_eq!(
+                should_include_source_file(&entry, &root, true),
+                expected,
+                "unexpected result for {relative} with include_test_files=true"
+            );
+        }
     }
 
     #[test]
