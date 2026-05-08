@@ -149,61 +149,12 @@ pub fn package_sources_with_test_files(
         // Fall through to regular Cairo file collection
     }
 
-    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(package_metadata.root.clone())
+    let root = &package_metadata.root;
+    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(root.clone())
         .into_iter()
         .filter_map(std::result::Result::ok)
         .filter(|f| f.file_type().is_file())
-        .filter(|f| {
-            // Check if this is a test file
-            if let Some(path_str) = f.path().to_str() {
-                // Check if the path contains test directories but only if it's in src/
-                let is_in_src = path_str.contains("/src/");
-                let has_test_in_path = path_str.contains("/test") || path_str.contains("/tests/");
-
-                if is_in_src && has_test_in_path {
-                    // This is a test file in src/
-                    return include_test_files;
-                }
-
-                // Exclude test directories outside src/
-                if path_str.contains("/tests/")
-                    || path_str.contains("/test/")
-                    || path_str.contains("/examples/")
-                    || path_str.contains("/benchmarks/")
-                {
-                    return false;
-                }
-            }
-
-            // Include Cairo files
-            if let Some(ext) = f.path().extension() {
-                if ext == OsStr::new(CAIRO_EXT) {
-                    return true;
-                }
-                // Only include Rust files if the package has been validated as a procedural macro
-                if ext == OsStr::new("rs") {
-                    // This will be handled by the procedural macro collection logic above
-                    // if this package is a valid procedural macro package
-                    return false;
-                }
-            }
-
-            // Include Scarb.toml files
-            if f.file_name() == OsStr::new("Scarb.toml") {
-                return true;
-            }
-
-            // Only include Cargo.toml if this package is a validated procedural macro
-            // (handled by the specialized collection above) or if there's no Cargo.toml
-            // indicating this is a pure Cairo package
-            if f.file_name() == OsStr::new("Cargo.toml") {
-                // Don't include Cargo.toml files from non-procedural macro packages
-                // They will be included by the specialized collection if they are valid proc macros
-                return false;
-            }
-
-            false
-        })
+        .filter(|f| should_include_source_file(f, root, include_test_files))
         .map(walkdir::DirEntry::into_path)
         .map(Utf8PathBuf::try_from)
         .try_collect()?;
@@ -254,6 +205,54 @@ pub fn biggest_common_prefix<P: AsRef<Utf8Path> + Clone>(
 }
 
 const CAIRO_EXT: &str = "cairo";
+
+/// Returns `true` if `entry` should be collected as a Cairo package source file.
+///
+/// Rules:
+/// - Files under `src/test/` or `src/tests/` are included only when `include_test_files` is set.
+/// - Top-level `test/`, `tests/`, `examples/`, and `benchmarks/` directories are always excluded.
+/// - `.cairo` files and `Scarb.toml` are included; `.rs` and `Cargo.toml` files are excluded
+///   (procedural macro packages are handled separately before reaching this function).
+fn should_include_source_file(
+    entry: &walkdir::DirEntry,
+    root: &Utf8Path,
+    include_test_files: bool,
+) -> bool {
+    let relative = match entry.path().strip_prefix(root) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+
+    let components: Vec<_> = relative.components().collect();
+    let first = match components.first() {
+        Some(c) => c.as_os_str(),
+        None => return false,
+    };
+
+    if first == "src" {
+        // Within src/, honour test sub-directories based on the caller's preference.
+        let in_test_dir = components
+            .iter()
+            .any(|c| c.as_os_str() == "test" || c.as_os_str() == "tests");
+        if in_test_dir {
+            return include_test_files;
+        }
+    } else if first == "test" || first == "tests" || first == "examples" || first == "benchmarks" {
+        // Always exclude these top-level directories.
+        return false;
+    }
+
+    if let Some(ext) = entry.path().extension() {
+        if ext == OsStr::new(CAIRO_EXT) {
+            return true;
+        }
+        if ext == OsStr::new("rs") {
+            return false;
+        }
+    }
+
+    entry.file_name() == OsStr::new("Scarb.toml")
+}
 
 // TOML structures for parsing Cairo procedural macro manifests
 #[derive(Debug, Deserialize)]
