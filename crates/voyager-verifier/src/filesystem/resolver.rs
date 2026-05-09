@@ -771,6 +771,7 @@ mod tests {
             ("src/tests/test.cairo", false, true),
             ("src/dir/test/test.cairo", false, true),
             ("src/dir/test/test.rs", false, false),
+            ("test/unit.cairo", false, false),
             ("tests/integration.cairo", false, false),
             ("examples/example.cairo", false, false),
             ("benchmarks/bench.cairo", false, false),
