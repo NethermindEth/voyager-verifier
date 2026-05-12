@@ -149,61 +149,12 @@ pub fn package_sources_with_test_files(
         // Fall through to regular Cairo file collection
     }
 
-    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(package_metadata.root.clone())
+    let root = &package_metadata.root;
+    let mut sources: Vec<Utf8PathBuf> = WalkDir::new(root)
         .into_iter()
         .filter_map(std::result::Result::ok)
         .filter(|f| f.file_type().is_file())
-        .filter(|f| {
-            // Check if this is a test file
-            if let Some(path_str) = f.path().to_str() {
-                // Check if the path contains test directories but only if it's in src/
-                let is_in_src = path_str.contains("/src/");
-                let has_test_in_path = path_str.contains("/test") || path_str.contains("/tests/");
-
-                if is_in_src && has_test_in_path {
-                    // This is a test file in src/
-                    return include_test_files;
-                }
-
-                // Exclude test directories outside src/
-                if path_str.contains("/tests/")
-                    || path_str.contains("/test/")
-                    || path_str.contains("/examples/")
-                    || path_str.contains("/benchmarks/")
-                {
-                    return false;
-                }
-            }
-
-            // Include Cairo files
-            if let Some(ext) = f.path().extension() {
-                if ext == OsStr::new(CAIRO_EXT) {
-                    return true;
-                }
-                // Only include Rust files if the package has been validated as a procedural macro
-                if ext == OsStr::new("rs") {
-                    // This will be handled by the procedural macro collection logic above
-                    // if this package is a valid procedural macro package
-                    return false;
-                }
-            }
-
-            // Include Scarb.toml files
-            if f.file_name() == OsStr::new("Scarb.toml") {
-                return true;
-            }
-
-            // Only include Cargo.toml if this package is a validated procedural macro
-            // (handled by the specialized collection above) or if there's no Cargo.toml
-            // indicating this is a pure Cairo package
-            if f.file_name() == OsStr::new("Cargo.toml") {
-                // Don't include Cargo.toml files from non-procedural macro packages
-                // They will be included by the specialized collection if they are valid proc macros
-                return false;
-            }
-
-            false
-        })
+        .filter(|f| should_include_source_file(f, root, include_test_files))
         .map(walkdir::DirEntry::into_path)
         .map(Utf8PathBuf::try_from)
         .try_collect()?;
@@ -254,6 +205,51 @@ pub fn biggest_common_prefix<P: AsRef<Utf8Path> + Clone>(
 }
 
 const CAIRO_EXT: &str = "cairo";
+
+/// Returns `true` if `entry` should be collected as a Cairo package source file.
+///
+/// Rules:
+/// - Files under `src/test/` or `src/tests/` are included only when `include_test_files` is set.
+/// - Top-level `test/`, `tests/`, `examples/`, and `benchmarks/` directories are always excluded.
+/// - `.cairo` files and `Scarb.toml` are included; `.rs` and `Cargo.toml` files are excluded
+///   (procedural macro packages are handled separately before reaching this function).
+fn should_include_source_file(
+    entry: &walkdir::DirEntry,
+    root: &Utf8Path,
+    include_test_files: bool,
+) -> bool {
+    let Ok(relative) = entry.path().strip_prefix(root) else {
+        return false;
+    };
+
+    let mut components = relative.components();
+    let first = match components.next() {
+        Some(c) => c.as_os_str(),
+        None => return false,
+    };
+
+    if first == "src" {
+        // Within src/, honour test sub-directories based on the caller's preference.
+        let in_test_dir = components.any(|c| c.as_os_str() == "test" || c.as_os_str() == "tests");
+        if in_test_dir && !include_test_files {
+            return false;
+        }
+    } else if first == "test" || first == "tests" || first == "examples" || first == "benchmarks" {
+        // Always exclude these top-level directories.
+        return false;
+    }
+
+    if let Some(ext) = entry.path().extension() {
+        if ext == OsStr::new(CAIRO_EXT) {
+            return true;
+        }
+        if ext == OsStr::new("rs") {
+            return false;
+        }
+    }
+
+    entry.file_name() == OsStr::new("Scarb.toml")
+}
 
 // TOML structures for parsing Cairo procedural macro manifests
 #[derive(Debug, Deserialize)]
@@ -708,7 +704,6 @@ fn should_exclude_rust_file(file_path: &Utf8Path) -> bool {
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]
@@ -764,73 +759,78 @@ mod tests {
     #[test]
     fn test_file_filtering_logic() {
         let temp_dir = TempDir::new().unwrap();
-        let temp_path = PathBuf::from(temp_dir.path());
+        let root =
+            Utf8PathBuf::try_from(temp_dir.path().join("example/benchmarks/tests/test")).unwrap();
 
-        // Create test directory structure
-        std::fs::create_dir_all(temp_path.join("src")).unwrap();
-        std::fs::create_dir_all(temp_path.join("tests")).unwrap();
-        std::fs::create_dir_all(temp_path.join("examples")).unwrap();
+        let test_cases = [
+            //File name | Expected with            | Expected with
+            //          | include_test_files=false | include_test_files=true
+            ("src/lib.cairo", true, true),
+            ("src/main.rs", false, false),
+            ("src/test/test.cairo", false, true),
+            ("src/tests/test.cairo", false, true),
+            ("src/dir/test/test.cairo", false, true),
+            ("src/dir/test/test.rs", false, false),
+            ("test/unit.cairo", false, false),
+            ("tests/integration.cairo", false, false),
+            ("examples/example.cairo", false, false),
+            ("benchmarks/bench.cairo", false, false),
+            ("Scarb.toml", true, true),
+            ("root_file.cairo", true, true),
+        ];
 
-        // Create test files
-        std::fs::write(temp_path.join("src").join("lib.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("src").join("main.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("tests").join("test.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("examples").join("example.cairo"), "").unwrap();
-        std::fs::write(temp_path.join("Scarb.toml"), "").unwrap();
-        std::fs::write(temp_path.join("other.txt"), "").unwrap();
+        // Create files
+        for (path, _, _) in &test_cases {
+            let full_path = root.join(path);
 
-        // Test the filtering logic used in package_sources
-        let cairo_files: Vec<_> = walkdir::WalkDir::new(&temp_path)
+            if let Some(parent) = full_path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+
+            fs::write(full_path, "").unwrap();
+        }
+
+        // Test include_test_files = false
+        for entry in WalkDir::new(&root)
             .into_iter()
-            .filter_map(std::result::Result::ok)
-            .filter(|f| f.file_type().is_file())
-            .filter(|f| {
-                // Test the exclusion logic
-                if let Some(path_str) = f.path().to_str() {
-                    if path_str.contains("/tests/")
-                        || path_str.contains("/test/")
-                        || path_str.contains("/examples/")
-                        || path_str.contains("/benchmarks/")
-                    {
-                        return false;
-                    }
-                }
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let relative = Utf8Path::from_path(entry.path().strip_prefix(&root).unwrap()).unwrap();
 
-                // Test the inclusion logic
-                if let Some(ext) = f.path().extension() {
-                    if ext == std::ffi::OsStr::new(CAIRO_EXT) {
-                        return true;
-                    }
-                }
+            let expected = test_cases
+                .iter()
+                .find(|(path, _, _)| *path == relative)
+                .map(|(_, expected, _)| *expected)
+                .unwrap();
 
-                // Test Scarb.toml inclusion
-                if f.file_name() == std::ffi::OsStr::new("Scarb.toml") {
-                    return true;
-                }
+            assert_eq!(
+                should_include_source_file(&entry, &root, false),
+                expected,
+                "unexpected result for {relative} with include_test_files=false"
+            );
+        }
 
-                false
-            })
-            .collect();
+        // Test include_test_files = true
+        for entry in WalkDir::new(&root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let relative = Utf8Path::from_path(entry.path().strip_prefix(&root).unwrap()).unwrap();
 
-        // Should include cairo files from src, Scarb.toml, but not from tests or examples
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("lib.cairo")));
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("main.cairo")));
-        assert!(cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("Scarb.toml")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.path().to_str().unwrap().contains("/tests/")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.path().to_str().unwrap().contains("/examples/")));
-        assert!(!cairo_files
-            .iter()
-            .any(|f| f.file_name() == std::ffi::OsStr::new("other.txt")));
+            let expected = test_cases
+                .iter()
+                .find(|(path, _, _)| *path == relative)
+                .map(|(_, _, expected)| *expected)
+                .unwrap();
+
+            assert_eq!(
+                should_include_source_file(&entry, &root, true),
+                expected,
+                "unexpected result for {relative} with include_test_files=true"
+            );
+        }
     }
 
     #[test]
