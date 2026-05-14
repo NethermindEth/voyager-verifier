@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] 
+
+### Changed
+- Refactored source file filtering logic in resolver module for improved clarity and maintainability.
+
+### Fixed
+- Fixed test file filtering logic to handle edge cases correctly.
+
+---
+
 ## [2.3.0] - 2026-04-16
 
 ### Added
