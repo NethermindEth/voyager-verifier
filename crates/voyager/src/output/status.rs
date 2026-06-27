@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
+use url::Url;
 use voyager_verifier::api::{VerificationJob, VerifyJobStatus};
 
 /// Format timestamp as human-readable string
@@ -189,7 +190,7 @@ fn progress_bar(percentage: u8) -> String {
 /// # Errors
 ///
 /// Returns `std::fmt::Error` if writing to the output string fails (should never happen in practice).
-pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
+pub fn format_text(job: &VerificationJob, api_base_url: &Url) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
     // Header with status emoji
@@ -271,8 +272,8 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
                 output,
                 "\n✅ Verification successful!\n\
                 The contract is now verified and visible on Voyager at:\n\
-                https://voyager.online/class/{}\n",
-                job.class_hash()
+                {}\n",
+                class_url(job.class_hash(), api_base_url)
             )?;
         }
         VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => {
@@ -291,6 +292,45 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     }
 
     Ok(output)
+}
+
+fn class_url(class_hash: &str, api_base_url: &Url) -> String {
+    let mut url = api_base_url.clone();
+
+    if let Some(host) = voyager_explorer_host(api_base_url.host_str()) {
+        let _host_set = url.set_host(Some(host));
+        let _port_cleared = url.set_port(None);
+    }
+
+    let _username_cleared = url.set_username("");
+    let _userinfo_cleared = url.set_password(None);
+    url.set_path("");
+    url.set_query(None);
+    url.set_fragment(None);
+
+    let path_updated = match url.path_segments_mut() {
+        Ok(mut segments) => {
+            segments.clear();
+            segments.extend(["class", class_hash]);
+            true
+        }
+        Err(()) => false,
+    };
+
+    if !path_updated {
+        url.set_path(&format!("class/{class_hash}"));
+    }
+
+    url.to_string()
+}
+
+fn voyager_explorer_host(api_host: Option<&str>) -> Option<&'static str> {
+    match api_host {
+        Some("api.voyager.online") => Some("voyager.online"),
+        Some("sepolia-api.voyager.online") => Some("sepolia.voyager.online"),
+        Some("dev-api.voyager.online") => Some("dev.voyager.online"),
+        _ => None,
+    }
 }
 
 /// JSON output structure for programmatic parsing
@@ -471,10 +511,10 @@ pub fn format_inline_status(job: &VerificationJob) -> String {
 
 /// Main formatting function that delegates to specific formatters
 #[must_use]
-pub fn format_status(job: &VerificationJob, format: OutputFormat) -> String {
+pub fn format_status(job: &VerificationJob, format: OutputFormat, api_base_url: &Url) -> String {
     match format {
         OutputFormat::Text => {
-            format_text(job).unwrap_or_else(|_| "Error formatting text".to_string())
+            format_text(job, api_base_url).unwrap_or_else(|_| "Error formatting text".to_string())
         }
         OutputFormat::Json => format_json(job),
         OutputFormat::Table => {
@@ -515,5 +555,68 @@ mod tests {
         let ts = 1_704_067_200.0; // 2024-01-01 00:00:00 UTC
         let formatted = format_timestamp(ts);
         assert!(formatted.contains("2024-01-01"));
+    }
+
+    #[test]
+    fn test_class_url_uses_configured_voyager_endpoint() {
+        let class_hash = "0x123";
+
+        for (api_url, expected) in [
+            (
+                "https://api.voyager.online/beta",
+                "https://voyager.online/class/0x123",
+            ),
+            (
+                "https://sepolia-api.voyager.online/beta",
+                "https://sepolia.voyager.online/class/0x123",
+            ),
+            (
+                "https://dev-api.voyager.online/beta",
+                "https://dev.voyager.online/class/0x123",
+            ),
+            (
+                "https://sepolia-api.voyager.online:9443/beta",
+                "https://sepolia.voyager.online/class/0x123",
+            ),
+        ] {
+            assert_eq!(class_url(class_hash, &url(api_url)), expected);
+        }
+    }
+
+    #[test]
+    fn test_class_url_uses_custom_endpoint_host_without_api_path() {
+        assert_eq!(
+            class_url(
+                "0x123",
+                &url("https://custom-api.example.com/beta?ignored=true#fragment")
+            ),
+            "https://custom-api.example.com/class/0x123"
+        );
+    }
+
+    #[test]
+    fn test_class_url_strips_custom_endpoint_credentials() {
+        assert_eq!(
+            class_url(
+                "0x123",
+                &url("https://user:pwd@custom-api.example.com:8443/beta")
+            ),
+            "https://custom-api.example.com:8443/class/0x123"
+        );
+    }
+
+    #[test]
+    fn test_class_url_does_not_match_voyager_host_suffixes() {
+        assert_eq!(
+            class_url(
+                "0x123",
+                &url("https://sepolia-api.voyager.online.example/beta")
+            ),
+            "https://sepolia-api.voyager.online.example/class/0x123"
+        );
+    }
+
+    fn url(input: &str) -> Url {
+        Url::parse(input).unwrap_or_else(|err| panic!("test URL must be valid: {err}"))
     }
 }
