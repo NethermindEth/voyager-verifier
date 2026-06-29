@@ -9,7 +9,7 @@
 //! - Managing the verification lifecycle from submission to completion
 
 use crate::{
-    cli::args::VerifyArgs,
+    cli::args::{NetworkKind, VerifyArgs},
     errors::CliError,
     file_collector::{log_verification_info, prepare_project_for_verification},
     license,
@@ -397,27 +397,7 @@ pub fn execute_verification(
         )
         .map_err(CliError::from)?;
 
-    // Determine network from args
-    let network = args.network.as_ref().map_or_else(
-        || {
-            // Extract from URL if network not specified
-            let url = args.network_url.url.as_str();
-            if url.contains("sepolia") {
-                "sepolia"
-            } else if url.contains("dev") {
-                "dev"
-            } else if url.contains("mainnet") || url.contains("api.voyager.online") {
-                "mainnet"
-            } else {
-                "custom"
-            }
-        },
-        |net| match net {
-            crate::cli::args::NetworkKind::Mainnet => "mainnet",
-            crate::cli::args::NetworkKind::Sepolia => "sepolia",
-            crate::cli::args::NetworkKind::Dev => "dev",
-        },
-    );
+    let network = resolved_network_name(args.network.as_ref(), &args.network_url.url);
 
     // Save verification record to history database
     if let Err(e) = save_to_history(&HistoryParams {
@@ -435,6 +415,20 @@ pub fn execute_verification(
     }
 
     Ok(job_id)
+}
+
+fn resolved_network_name(network: Option<&NetworkKind>, url: &url::Url) -> &'static str {
+    match network {
+        Some(NetworkKind::Mainnet) => "mainnet",
+        Some(NetworkKind::Sepolia) => "sepolia",
+        Some(NetworkKind::Dev) => "dev",
+        None => match url.host_str() {
+            Some("api.voyager.online" | "starknet-mainnet.infura.io") => "mainnet",
+            Some("sepolia-api.voyager.online" | "starknet-sepolia.infura.io") => "sepolia",
+            Some("dev-api.voyager.online") => "dev",
+            _ => "custom",
+        },
+    }
 }
 
 /// Parameters for saving verification history
@@ -540,7 +534,7 @@ pub fn check(
 
         // Print newline and show final detailed status
         println!();
-        let output = crate::output::status::format_status(&status, format);
+        let output = crate::output::status::format_status(&status, format, api_client.base_url());
         println!("{output}");
 
         Ok(status)
@@ -554,7 +548,7 @@ pub fn check(
             warn!("Failed to update verification history: {e}");
         }
 
-        let output = crate::output::status::format_status(&status, format);
+        let output = crate::output::status::format_status(&status, format, api_client.base_url());
         println!("{output}");
 
         Ok(status)
@@ -1043,4 +1037,48 @@ pub fn display_batch_summary(summary: &BatchVerificationSummary) {
         }
     }
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+
+    #[test]
+    fn resolved_network_name_uses_configured_url_when_network_is_implicit() {
+        for (input, expected) in [
+            ("https://api.voyager.online/beta", "mainnet"),
+            ("https://sepolia-api.voyager.online/beta", "sepolia"),
+            ("https://dev-api.voyager.online/beta", "dev"),
+            ("https://starknet-sepolia.infura.io/v3/test-key", "sepolia"),
+            ("https://starknet-mainnet.infura.io/v3/test-key", "mainnet"),
+            ("https://custom.example/beta", "custom"),
+            ("https://not-sepolia.example/beta", "custom"),
+            ("https://sepolia-api.voyager.online.example/beta", "custom"),
+        ] {
+            assert_eq!(resolved_network_name(None, &url(input)), expected);
+        }
+    }
+
+    #[test]
+    fn resolved_network_name_prefers_explicit_network() {
+        let custom_url = url("https://custom.example/beta");
+
+        assert_eq!(
+            resolved_network_name(Some(&NetworkKind::Mainnet), &custom_url),
+            "mainnet"
+        );
+        assert_eq!(
+            resolved_network_name(Some(&NetworkKind::Sepolia), &custom_url),
+            "sepolia"
+        );
+        assert_eq!(
+            resolved_network_name(Some(&NetworkKind::Dev), &custom_url),
+            "dev"
+        );
+    }
+
+    fn url(input: &str) -> Url {
+        Url::parse(input).unwrap_or_else(|err| panic!("test URL must be valid: {err}"))
+    }
 }
