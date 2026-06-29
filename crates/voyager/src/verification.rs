@@ -528,7 +528,7 @@ pub fn check(
         // Print newline and show final detailed status
         println!();
         let ui_endpoint = NetworkKind::from_url(api_client.base_url().as_str())
-            .map_or_else(|| None, |network_kind| network_kind.endpoint_ui());
+            .map_or_else(|| None, |network_kind| Some(network_kind.endpoint_ui()));
         let output = crate::output::status::format_status(&status, format, ui_endpoint);
         println!("{output}");
 

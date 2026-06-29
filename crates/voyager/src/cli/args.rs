@@ -691,11 +691,11 @@ impl NetworkKind {
         }
     }
 
-    pub const fn endpoint_ui(&self) -> Option<&'static str> {
+    pub const fn endpoint_ui(&self) -> &'static str {
         match self {
-            Self::Mainnet => Some("https://voyager.online/"),
-            Self::Sepolia => Some("https://sepolia.voyager.online/"),
-            Self::Dev => None,
+            Self::Mainnet => "https://voyager.online/",
+            Self::Sepolia => "https://sepolia.voyager.online/",
+            Self::Dev => "https://dev.voyager.online/",
         }
     }
 }
