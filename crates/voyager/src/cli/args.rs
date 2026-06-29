@@ -656,9 +656,9 @@ pub enum NetworkKind {
 impl std::fmt::Display for NetworkKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            NetworkKind::Mainnet => "mainnet",
-            NetworkKind::Sepolia => "sepolia",
-            NetworkKind::Dev => "dev",
+            Self::Mainnet => "mainnet",
+            Self::Sepolia => "sepolia",
+            Self::Dev => "dev",
         };
         write!(f, "{s}")
     }
@@ -667,11 +667,11 @@ impl std::fmt::Display for NetworkKind {
 impl NetworkKind {
     pub fn from_url(url: &str) -> Option<Self> {
         if url.contains("sepolia") {
-            Some(NetworkKind::Sepolia)
+            Some(Self::Sepolia)
         } else if url.contains("dev") {
-            Some(NetworkKind::Dev)
+            Some(Self::Dev)
         } else if url.contains("mainnet") || url.contains("api.voyager.online") {
-            Some(NetworkKind::Mainnet)
+            Some(Self::Mainnet)
         } else {
             None
         }
@@ -681,21 +681,21 @@ impl NetworkKind {
         match self {
             // SAFETY: Hardcoded URL is guaranteed to be valid
             #[allow(clippy::unwrap_used)]
-            NetworkKind::Mainnet => Url::parse(MAINNET_API_URL).unwrap(),
+            Self::Mainnet => Url::parse(MAINNET_API_URL).unwrap(),
             // SAFETY: Hardcoded URL is guaranteed to be valid
             #[allow(clippy::unwrap_used)]
-            NetworkKind::Sepolia => Url::parse(SEPOLIA_API_URL).unwrap(),
+            Self::Sepolia => Url::parse(SEPOLIA_API_URL).unwrap(),
             // SAFETY: Hardcoded URL is guaranteed to be valid
             #[allow(clippy::unwrap_used)]
-            NetworkKind::Dev => Url::parse("https://dev-api.voyager.online/beta").unwrap(),
+            Self::Dev => Url::parse("https://dev-api.voyager.online/beta").unwrap(),
         }
     }
 
-    pub fn endpoint_ui(&self) -> Option<&'static str> {
+    pub const fn endpoint_ui(&self) -> Option<&'static str> {
         match self {
-            NetworkKind::Mainnet => Some("https://voyager.online/"),
-            NetworkKind::Sepolia => Some("https://sepolia.voyager.online/"),
-            NetworkKind::Dev => None,
+            Self::Mainnet => Some("https://voyager.online/"),
+            Self::Sepolia => Some("https://sepolia.voyager.online/"),
+            Self::Dev => None,
         }
     }
 }
@@ -726,15 +726,19 @@ impl clap::FromArgMatches for Network {
         } else {
             // Resolve URL from explicit --url, then --network, then placeholder.
             // The placeholder may be replaced by config or trigger validation error later.
-            let url = if let Some(url) = matches.get_one::<Url>("url") {
-                url.clone()
-            } else if let Some(network) = matches.get_one::<NetworkKind>("network") {
-                network.endpoint_api()
-            } else {
-                // SAFETY: Hardcoded URL is guaranteed to be valid
-                #[allow(clippy::unwrap_used)]
-                Url::parse("https://placeholder.invalid").unwrap()
-            };
+            let url = matches.get_one::<Url>("url").map_or_else(
+                || {
+                    matches.get_one::<NetworkKind>("network").map_or_else(
+                        || {
+                            // SAFETY: Hardcoded URL is guaranteed to be valid
+                            #[allow(clippy::unwrap_used)]
+                            Url::parse("https://placeholder.invalid").unwrap()
+                        },
+                        NetworkKind::endpoint_api,
+                    )
+                },
+                std::clone::Clone::clone,
+            );
 
             Ok(Self { url })
         }
