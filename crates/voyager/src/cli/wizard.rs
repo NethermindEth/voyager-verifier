@@ -135,25 +135,22 @@ fn prompt_network() -> Result<(Option<NetworkKind>, Network), CliError> {
         0 => Ok((
             Some(NetworkKind::Mainnet),
             Network {
-                // SAFETY: Hardcoded URL is guaranteed to be valid
                 #[allow(clippy::unwrap_used)]
-                url: Url::parse("https://api.voyager.online/beta").unwrap(),
+                url: Url::parse(NetworkKind::Mainnet.endpoint_api()).unwrap(),
             },
         )),
         1 => Ok((
             Some(NetworkKind::Sepolia),
             Network {
-                // SAFETY: Hardcoded URL is guaranteed to be valid
                 #[allow(clippy::unwrap_used)]
-                url: Url::parse("https://sepolia-api.voyager.online/beta").unwrap(),
+                url: Url::parse(NetworkKind::Sepolia.endpoint_api()).unwrap(),
             },
         )),
         2 => Ok((
             Some(NetworkKind::Dev),
             Network {
-                // SAFETY: Hardcoded URL is guaranteed to be valid
                 #[allow(clippy::unwrap_used)]
-                url: Url::parse("https://dev-api.voyager.online/beta").unwrap(),
+                url: Url::parse(NetworkKind::Dev.endpoint_api()).unwrap(),
             },
         )),
         3 => {

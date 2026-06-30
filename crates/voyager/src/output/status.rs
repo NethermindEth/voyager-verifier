@@ -189,7 +189,10 @@ fn progress_bar(percentage: u8) -> String {
 /// # Errors
 ///
 /// Returns `std::fmt::Error` if writing to the output string fails (should never happen in practice).
-pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
+pub fn format_text(
+    job: &VerificationJob,
+    ui_endpoint: Option<&str>,
+) -> Result<String, std::fmt::Error> {
     let mut output = String::new();
 
     // Header with status emoji
@@ -267,13 +270,16 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     // Status-specific messages
     match job.status() {
         VerifyJobStatus::Success => {
-            write!(
-                output,
-                "\n✅ Verification successful!\n\
-                The contract is now verified and visible on Voyager at:\n\
-                https://voyager.online/class/{}\n",
-                job.class_hash()
-            )?;
+            write!(output, "\n✅ Verification successful!\n")?;
+            if let Some(ui_endpoint) = ui_endpoint {
+                write!(
+                    output,
+                    "The contract is now verified and visible on Voyager at:\n\
+                    {}class/{}\n",
+                    ui_endpoint,
+                    job.class_hash()
+                )?;
+            }
         }
         VerifyJobStatus::Fail | VerifyJobStatus::CompileFailed => {
             output.push_str("\n❌ Verification failed!\n");
@@ -291,6 +297,15 @@ pub fn format_text(job: &VerificationJob) -> Result<String, std::fmt::Error> {
     }
 
     Ok(output)
+}
+
+fn voyager_explorer_host(api_host: Option<&str>) -> Option<&'static str> {
+    match api_host {
+        Some("api.voyager.online") => Some("voyager.online"),
+        Some("sepolia-api.voyager.online") => Some("sepolia.voyager.online"),
+        Some("dev-api.voyager.online") => Some("dev.voyager.online"),
+        _ => None,
+    }
 }
 
 /// JSON output structure for programmatic parsing
@@ -471,10 +486,14 @@ pub fn format_inline_status(job: &VerificationJob) -> String {
 
 /// Main formatting function that delegates to specific formatters
 #[must_use]
-pub fn format_status(job: &VerificationJob, format: OutputFormat) -> String {
+pub fn format_status(
+    job: &VerificationJob,
+    format: OutputFormat,
+    ui_endpoint: Option<&str>,
+) -> String {
     match format {
         OutputFormat::Text => {
-            format_text(job).unwrap_or_else(|_| "Error formatting text".to_string())
+            format_text(job, ui_endpoint).unwrap_or_else(|_| "Error formatting text".to_string())
         }
         OutputFormat::Json => format_json(job),
         OutputFormat::Table => {

@@ -9,7 +9,7 @@
 //! - Managing the verification lifecycle from submission to completion
 
 use crate::{
-    cli::args::VerifyArgs,
+    cli::args::{NetworkKind, VerifyArgs},
     errors::CliError,
     file_collector::{log_verification_info, prepare_project_for_verification},
     license,
@@ -397,34 +397,14 @@ pub fn execute_verification(
         )
         .map_err(CliError::from)?;
 
-    // Determine network from args
-    let network = args.network.as_ref().map_or_else(
-        || {
-            // Extract from URL if network not specified
-            let url = args.network_url.url.as_str();
-            if url.contains("sepolia") {
-                "sepolia"
-            } else if url.contains("dev") {
-                "dev"
-            } else if url.contains("mainnet") || url.contains("api.voyager.online") {
-                "mainnet"
-            } else {
-                "custom"
-            }
-        },
-        |net| match net {
-            crate::cli::args::NetworkKind::Mainnet => "mainnet",
-            crate::cli::args::NetworkKind::Sepolia => "sepolia",
-            crate::cli::args::NetworkKind::Dev => "dev",
-        },
-    );
+    let network = resolved_network_name(args.network_url.url.as_str());
 
     // Save verification record to history database
     if let Err(e) = save_to_history(&HistoryParams {
         job_id: &job_id,
         class_hash,
         contract_name,
-        network,
+        network: &network,
         cairo_version: &cairo_version_str,
         scarb_version: &scarb_version_str,
         dojo_version: dojo_version.as_deref(),
@@ -435,6 +415,13 @@ pub fn execute_verification(
     }
 
     Ok(job_id)
+}
+
+fn resolved_network_name(url: &str) -> String {
+    NetworkKind::from_url(url).map_or_else(
+        || "custom".to_string(),
+        |network_kind| network_kind.to_string(),
+    )
 }
 
 /// Parameters for saving verification history
@@ -540,7 +527,9 @@ pub fn check(
 
         // Print newline and show final detailed status
         println!();
-        let output = crate::output::status::format_status(&status, format);
+        let ui_endpoint = NetworkKind::from_url(api_client.base_url().as_str())
+            .map_or_else(|| None, |network_kind| Some(network_kind.endpoint_ui()));
+        let output = crate::output::status::format_status(&status, format, ui_endpoint);
         println!("{output}");
 
         Ok(status)
@@ -554,7 +543,7 @@ pub fn check(
             warn!("Failed to update verification history: {e}");
         }
 
-        let output = crate::output::status::format_status(&status, format);
+        let output = crate::output::status::format_status(&status, format, None);
         println!("{output}");
 
         Ok(status)
@@ -1043,4 +1032,26 @@ pub fn display_batch_summary(summary: &BatchVerificationSummary) {
         }
     }
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voyager_verifier::voyager::{MAINNET_API_URL, SEPOLIA_API_URL};
+
+    #[test]
+    fn resolved_network_name_uses_configured_url_when_network_is_implicit() {
+        for (input, expected) in [
+            (MAINNET_API_URL, "mainnet"),
+            (SEPOLIA_API_URL, "sepolia"),
+            ("https://dev-api.voyager.online/beta", "dev"),
+            ("https://starknet-sepolia.infura.io/v3/test-key", "sepolia"),
+            ("https://starknet-mainnet.infura.io/v3/test-key", "mainnet"),
+            ("https://custom.example/beta", "custom"),
+            ("https://not-sepolia.example/beta", "sepolia"),
+            ("https://sepolia-api.voyager.online.example/beta", "sepolia"),
+        ] {
+            assert_eq!(resolved_network_name(input), expected);
+        }
+    }
 }

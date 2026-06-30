@@ -48,6 +48,11 @@ impl ApiClient {
         }
     }
 
+    #[must_use]
+    pub const fn base_url(&self) -> &Url {
+        &self.base
+    }
+
     /// # Errors
     ///
     /// Will return `Err` if the URL cannot be a base.

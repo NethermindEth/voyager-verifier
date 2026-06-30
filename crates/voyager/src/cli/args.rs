@@ -6,7 +6,10 @@ use spdx::LicenseId;
 use std::{env, fmt::Display, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 
-use voyager_verifier::core::{class_hash::ClassHash, project::ProjectType};
+use voyager_verifier::{
+    core::{class_hash::ClassHash, project::ProjectType},
+    voyager::{MAINNET_API_URL, SEPOLIA_API_URL},
+};
 
 static VALID_NAME_REGEX: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$"));
@@ -650,6 +653,47 @@ pub enum NetworkKind {
     Dev,
 }
 
+impl std::fmt::Display for NetworkKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Mainnet => "mainnet",
+            Self::Sepolia => "sepolia",
+            Self::Dev => "dev",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl NetworkKind {
+    pub fn from_url(url: &str) -> Option<Self> {
+        if url.contains("sepolia") {
+            Some(Self::Sepolia)
+        } else if url.contains("dev") {
+            Some(Self::Dev)
+        } else if url.contains("mainnet") || url.contains("api.voyager.online") {
+            Some(Self::Mainnet)
+        } else {
+            None
+        }
+    }
+
+    pub const fn endpoint_api(&self) -> &'static str {
+        match self {
+            Self::Mainnet => MAINNET_API_URL,
+            Self::Sepolia => SEPOLIA_API_URL,
+            Self::Dev => "https://dev-api.voyager.online/beta",
+        }
+    }
+
+    pub const fn endpoint_ui(&self) -> &'static str {
+        match self {
+            Self::Mainnet => "https://voyager.online/",
+            Self::Sepolia => "https://sepolia.voyager.online/",
+            Self::Dev => "https://dev.voyager.online/",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Network {
     /// API endpoint URL
@@ -665,7 +709,6 @@ impl clap::FromArgMatches for Network {
             .flatten()
             .copied()
             .unwrap_or(false);
-
         if wizard_mode {
             // In wizard mode, provide a placeholder URL that will be replaced by the wizard
             // SAFETY: Hardcoded URL is guaranteed to be valid
@@ -680,8 +723,7 @@ impl clap::FromArgMatches for Network {
                 // SAFETY: Hardcoded URL is guaranteed to be valid
                 #[allow(clippy::unwrap_used)]
                 Url::parse("https://placeholder.invalid").unwrap()
-            });
-
+            }); // Exit early for demonstration purposes
             Ok(Self { url })
         }
     }
@@ -728,14 +770,11 @@ impl clap::Args for Network {
                 .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
                 .value_parser(Url::parse)
+                // TODO improve this logic to avoid hardcoding the default values in multiple places
                 .default_value_ifs([
-                    ("network", "mainnet", "https://api.voyager.online/beta"),
-                    (
-                        "network",
-                        "sepolia",
-                        "https://sepolia-api.voyager.online/beta",
-                    ),
-                    ("network", "dev", "https://dev-api.voyager.online/beta"),
+                    ("network", "mainnet", NetworkKind::Mainnet.endpoint_api()),
+                    ("network", "sepolia", NetworkKind::Sepolia.endpoint_api()),
+                    ("network", "dev", NetworkKind::Dev.endpoint_api()),
                 ]),
         )
     }
@@ -747,14 +786,11 @@ impl clap::Args for Network {
                 .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
                 .value_parser(Url::parse)
+                // TODO improve this logic to avoid hardcoding the default values in multiple places
                 .default_value_ifs([
-                    ("network", "mainnet", "https://api.voyager.online/beta"),
-                    (
-                        "network",
-                        "sepolia",
-                        "https://sepolia-api.voyager.online/beta",
-                    ),
-                    ("network", "dev", "https://dev-api.voyager.online/beta"),
+                    ("network", "mainnet", NetworkKind::Mainnet.endpoint_api()),
+                    ("network", "sepolia", NetworkKind::Sepolia.endpoint_api()),
+                    ("network", "dev", NetworkKind::Dev.endpoint_api()),
                 ]),
         )
     }
