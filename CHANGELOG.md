@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed test file filtering logic to handle edge cases correctly.
+- Fixed the CLI output: the URL now depends on the network type.
 
 ---
 
