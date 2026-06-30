@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.3.1] 
+## [2.3.1] - 2026-06-30
 
 ### Changed
 - Refactored source file filtering logic in resolver module for improved clarity and maintainability.
