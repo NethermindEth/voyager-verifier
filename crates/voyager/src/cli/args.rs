@@ -677,17 +677,11 @@ impl NetworkKind {
         }
     }
 
-    pub fn endpoint_api(&self) -> Url {
+    pub const fn endpoint_api(&self) -> &'static str {
         match self {
-            // SAFETY: Hardcoded URL is guaranteed to be valid
-            #[allow(clippy::unwrap_used)]
-            Self::Mainnet => Url::parse(MAINNET_API_URL).unwrap(),
-            // SAFETY: Hardcoded URL is guaranteed to be valid
-            #[allow(clippy::unwrap_used)]
-            Self::Sepolia => Url::parse(SEPOLIA_API_URL).unwrap(),
-            // SAFETY: Hardcoded URL is guaranteed to be valid
-            #[allow(clippy::unwrap_used)]
-            Self::Dev => Url::parse("https://dev-api.voyager.online/beta").unwrap(),
+            Self::Mainnet => MAINNET_API_URL,
+            Self::Sepolia => SEPOLIA_API_URL,
+            Self::Dev => "https://dev-api.voyager.online/beta",
         }
     }
 
@@ -715,31 +709,21 @@ impl clap::FromArgMatches for Network {
             .flatten()
             .copied()
             .unwrap_or(false);
-
         if wizard_mode {
             // In wizard mode, provide a placeholder URL that will be replaced by the wizard
             // SAFETY: Hardcoded URL is guaranteed to be valid
             #[allow(clippy::unwrap_used)]
             Ok(Self {
-                url: Url::parse("https://placeholder.invalid").unwrap(),
+                url: Url::parse("https://api.voyager.online/beta").unwrap(),
             })
         } else {
-            // Resolve URL from explicit --url, then --network, then placeholder.
-            // The placeholder may be replaced by config or trigger validation error later.
-            let url = matches.get_one::<Url>("url").map_or_else(
-                || {
-                    matches.get_one::<NetworkKind>("network").map_or_else(
-                        || {
-                            // SAFETY: Hardcoded URL is guaranteed to be valid
-                            #[allow(clippy::unwrap_used)]
-                            Url::parse("https://placeholder.invalid").unwrap()
-                        },
-                        NetworkKind::endpoint_api,
-                    )
-                },
-                std::clone::Clone::clone,
-            );
-
+            // Get URL from CLI args if provided, otherwise use a placeholder
+            // that will be replaced by config file or cause a validation error later
+            let url = matches.get_one::<Url>("url").cloned().unwrap_or_else(|| {
+                // SAFETY: Hardcoded URL is guaranteed to be valid
+                #[allow(clippy::unwrap_used)]
+                Url::parse("https://placeholder.invalid").unwrap()
+            }); // Exit early for demonstration purposes
             Ok(Self { url })
         }
     }
@@ -769,10 +753,8 @@ impl clap::FromArgMatches for Network {
             // Get URL from CLI args if provided
             if let Some(url) = matches.get_one::<Url>("url") {
                 self.url = url.clone();
-            } else if let Some(network) = matches.get_one::<NetworkKind>("network") {
-                self.url = network.endpoint_api();
             }
-            // If neither is provided, keep existing URL (may be from config or placeholder)
+            // If not provided, keep existing URL (may be from config or placeholder)
         }
         // In wizard mode, keep the placeholder URL (will be replaced by wizard)
         Ok(())
@@ -787,7 +769,13 @@ impl clap::Args for Network {
                 .long("url")
                 .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
-                .value_parser(Url::parse),
+                .value_parser(Url::parse)
+                // TODO improve this logic to avoid hardcoding the default values in multiple places
+                .default_value_ifs([
+                    ("network", "mainnet", NetworkKind::Mainnet.endpoint_api()),
+                    ("network", "sepolia", NetworkKind::Sepolia.endpoint_api()),
+                    ("network", "dev", NetworkKind::Dev.endpoint_api()),
+                ]),
         )
     }
 
@@ -797,7 +785,13 @@ impl clap::Args for Network {
                 .long("url")
                 .help("API endpoint URL (can also be set in .voyager.toml)")
                 .value_hint(clap::ValueHint::Url)
-                .value_parser(Url::parse),
+                .value_parser(Url::parse)
+                // TODO improve this logic to avoid hardcoding the default values in multiple places
+                .default_value_ifs([
+                    ("network", "mainnet", NetworkKind::Mainnet.endpoint_api()),
+                    ("network", "sepolia", NetworkKind::Sepolia.endpoint_api()),
+                    ("network", "dev", NetworkKind::Dev.endpoint_api()),
+                ]),
         )
     }
 }

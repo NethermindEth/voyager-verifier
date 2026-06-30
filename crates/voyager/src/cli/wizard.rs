@@ -135,19 +135,22 @@ fn prompt_network() -> Result<(Option<NetworkKind>, Network), CliError> {
         0 => Ok((
             Some(NetworkKind::Mainnet),
             Network {
-                url: NetworkKind::Mainnet.endpoint_api(),
+                #[allow(clippy::unwrap_used)]
+                url: Url::parse(NetworkKind::Mainnet.endpoint_api()).unwrap(),
             },
         )),
         1 => Ok((
             Some(NetworkKind::Sepolia),
             Network {
-                url: NetworkKind::Sepolia.endpoint_api(),
+                #[allow(clippy::unwrap_used)]
+                url: Url::parse(NetworkKind::Sepolia.endpoint_api()).unwrap(),
             },
         )),
         2 => Ok((
             Some(NetworkKind::Dev),
             Network {
-                url: NetworkKind::Dev.endpoint_api(),
+                #[allow(clippy::unwrap_used)]
+                url: Url::parse(NetworkKind::Dev.endpoint_api()).unwrap(),
             },
         )),
         3 => {
